@@ -1,1 +1,17 @@
+# macOS system files
+.DS_Store
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+
+# Environment and credentials
 .env
+*.json
+
+# Local CSV data files
+models
+logs
+data
+test_fetcher.py
+

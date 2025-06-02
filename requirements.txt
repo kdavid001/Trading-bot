@@ -1,0 +1,25 @@
+# Core dependencies
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+
+# Financial data
+alpha_vantage
+twelvedata
+ta
+pandas_ta
+
+# Machine Learning
+tensorflow
+transformers
+keras-tuner
+
+# News processing
+newsapi-python
+nltk
+textblob
+
+# Trading execution
+alpaca-trade-api
