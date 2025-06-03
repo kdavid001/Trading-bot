@@ -26,3 +26,7 @@ class NewsProcessor:
             text = f"{article['title']}. {article['description']}"
             sentiment_scores.append(self.analyze_sentiment(text))
         return sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
+
+
+# News = NewsProcessor()
+# News.process_news_batch([])

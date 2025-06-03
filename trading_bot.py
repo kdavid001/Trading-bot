@@ -13,7 +13,7 @@ def main():
     assets = [
         {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
         {'symbol': 'EUR/USD', 'news_query': 'EUR USD'},
-        {'symbol': 'SPY', 'news_query': 'S&P 500'}
+        # {'symbol': 'SPY', 'news_query': 'S&P 500'}
     ]
 
     # Step 1: Build dataset

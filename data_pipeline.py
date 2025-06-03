@@ -16,6 +16,7 @@ def build_dataset(assets):
 
     for asset in assets:
         symbol = asset['symbol']
+        # print(type(symbol))
         print(f"\n🔍 Processing {symbol}...")
 
         try:
@@ -32,6 +33,7 @@ def build_dataset(assets):
 
             # 3. Fetch and process news
             news = fetcher.get_news(asset['news_query'])
+            # print(f"This is from the news variable : \n {news}")
             sentiment = processor.process_news_batch(news)
 
             # 4. Feature engineering
@@ -64,3 +66,20 @@ def build_dataset(assets):
         print(f"{symbol}: {len(df)} rows | Columns: {list(df.columns)}")
 
     return datasets
+
+assets = [
+        {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+        {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+        # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+    ]
+data = build_dataset(assets)
+# print(f"This is from the build_dataset function : \n {data}")
+combined = []
+for symbol, df in data.items():
+    df = df.copy()
+    df['symbol'] = symbol
+    combined.append(df)
+
+full_df = pd.concat(combined)
+full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+print("✅ Saved all data to combined_data_pipeline.csv")
