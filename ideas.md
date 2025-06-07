@@ -2,6 +2,7 @@
 
 <li>Check the Sentiment analysis and see if it is actually being traineed on past news and not just recent ones</li>
 <li>To Improve the model you'd have to periodically train it every week at most</li>
+<li>Stop Looking at the problem as a regression task think of it as a classification oroblem to determine if it would increase or decrease over a certain period stop trying to predict the price</li>
 
 <h2>Dataset columns</h2>
 	<li>**open**: Price of the asset at the beginning of the time period.
@@ -17,13 +18,11 @@
 
 ⸻
 
-*🔍 Advanced/Composite Indicators*
-	<li>kst (Know Sure Thing): A momentum oscillator based on the smoothed rate-of-change for four different time frames.</li>
-	<li>squeeze: Often refers to “TTM Squeeze” — a condition when Bollinger Bands are inside Keltner Channels, indicating low volatility that may precede a breakout.
-	<li>news_sentiment: Sentiment score derived from news headlines or articles, typically via NLP models. Measures market sentiment (positive/negative/neutral).
-	<li>volume: Number of shares/contracts traded in a time period — a key indicator of market activity and strength of a price move.
-
-
+_🔍 Advanced/Composite Indicators_
+<li>kst (Know Sure Thing): A momentum oscillator based on the smoothed rate-of-change for four different time frames.</li>
+<li>squeeze: Often refers to “TTM Squeeze” — a condition when Bollinger Bands are inside Keltner Channels, indicating low volatility that may precede a breakout.
+<li>news_sentiment: Sentiment score derived from news headlines or articles, typically via NLP models. Measures market sentiment (positive/negative/neutral).
+<li>volume: Number of shares/contracts traded in a time period — a key indicator of market activity and strength of a price move.
 
 <h1> When to Consider a "Good" Model: </h1>
 For trading systems to be profitable, you need:
