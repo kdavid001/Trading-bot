@@ -23,6 +23,8 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
     processor = NewsProcessor()
     datasets = {}
 
+
+
     for asset in assets:
         symbol = asset['symbol']
         print(f"\n🔍 Processing {symbol}...")
@@ -30,6 +32,7 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
         try:
             # 1. Fetch and validate market data
             market_data = fetcher.get_market_data(symbol)
+            processed_data = engineer.add_technical_features(market_data)
             if market_data.empty:
                 print(f"❌ Empty market data for {symbol} - skipping")
                 continue
@@ -43,22 +46,25 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
                 print(f"ℹ️ Converting index to datetime for {symbol}")
                 market_data.index = pd.to_datetime(market_data.index)
 
+
             # 2. Fetch and process news (time-aligned)
             news = fetcher.get_news(asset['news_query'])
-            if not news.empty:
-                sentiment = processor.process_news_batch(news)
-                # Merge sentiment with market data by timestamp
+            if not news.empty:  # Now safe to check .empty
+                # Resample to align with market data frequency
+                sentiment = news['sentiment'].resample('D').mean().ffill()
+
+                # Merge with market data
                 market_data = market_data.merge(
                     sentiment,
                     left_index=True,
                     right_index=True,
-                    how='left'
+                    how='left',
+                    suffixes=('', '_news')
                 )
-                # Forward-fill missing sentiment values
-                market_data['news_sentiment'] = market_data['news_sentiment'].ffill()
+                market_data['news_sentiment'] = market_data['sentiment'].ffill().fillna(0)
             else:
                 print(f"⚠️ No news data for {symbol}")
-                market_data['news_sentiment'] = 0.0  # Neutral sentiment
+                market_data['news_sentiment'] = 0.0
 
             # 3. Feature engineering
             processed_data = engineer.add_technical_features(market_data)
@@ -67,10 +73,12 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
                 continue
 
             # 4. Create targets (uncomment when ready)
-            # processed_data = engineer.create_targets(processed_data)
-            # if processed_data.empty:
-            #     print(f"❌ Target creation returned empty DataFrame for {symbol}")
-            #     continue
+            create_targets = False
+            if create_targets:
+                processed_data = engineer.create_targets(processed_data)
+            if processed_data.empty:
+                print(f"❌ Target creation returned empty DataFrame for {symbol}")
+                continue
 
             # Add symbol identifier
             processed_data['symbol'] = symbol
@@ -85,15 +93,15 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
     if not datasets:
         raise ValueError("❌ No valid datasets were created - check previous error messages")
 
-    # Dataset quality report
-    print("\n=== Dataset Quality Report ===")
-    for symbol, df in datasets.items():
-        print(f"\n📊 {symbol}:")
-        print(f"Time range: {df.index.min()} to {df.index.max()}")
-        print(f"Rows: {len(df)} | Columns: {len(df.columns)}")
-        print(f"Missing values: {df.isna().sum().sum()}")
-        if 'news_sentiment' in df.columns:
-            print(f"Sentiment range: {df['news_sentiment'].min():.2f} to {df['news_sentiment'].max():.2f}")
+    # # Dataset quality report
+    # print("\n=== Dataset Quality Report ===")
+    # for symbol, df in datasets.items():
+    #     print(f"\n📊 {symbol}:")
+    #     print(f"Time range: {df.index.min()} to {df.index.max()}")
+    #     print(f"Rows: {len(df)} | Columns: {len(df.columns)}")
+    #     print(f"Missing values: {df.isna().sum().sum()}")
+    #     if 'news_sentiment' in df.columns:
+    #         print(f"Sentiment range: {df['news_sentiment'].min():.2f} to {df['news_sentiment'].max():.2f}")
 
     return datasets
 
@@ -126,19 +134,41 @@ def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     return full_df
 
-assets = [
-        {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-        {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-        # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-    ]
-data = build_dataset(assets)
-# print(f"This is from the build_dataset function : \n {data}")
-combined = []
-for symbol, df in data.items():
-    df = df.copy()
-    df['symbol'] = symbol
-    combined.append(df)
 
-full_df = pd.concat(combined)
-full_df.to_csv("data/combined_data_pipeline.csv", index=True)
-print("✅ Saved all data to combined_data_pipeline.csv")
+# Add this new function to validate the combined dataset
+def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1000) -> pd.DataFrame:
+    """Validate the combined dataset meets minimum requirements"""
+    if not isinstance(full_df.index, pd.DatetimeIndex):
+        raise ValueError("Data must have DatetimeIndex")
+
+    # Check each symbol has enough data
+    symbol_counts = full_df['symbol'].value_counts()
+    for symbol, count in symbol_counts.items():
+        if count < min_samples_per_asset:
+            raise ValueError(f"Symbol {symbol} only has {count} samples (min {min_samples_per_asset})")
+
+    # Check required columns
+    required_cols = {'open', 'high', 'low', 'close', 'symbol'}
+    missing = required_cols - set(full_df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    return full_df.sort_index()
+
+
+# assets = [
+#     {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+#     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+#     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+# ]
+# data = build_dataset(assets)
+# # print(f"This is from the build_dataset function : \n {data}")
+# combined = []
+# for symbol, df in data.items():
+#     df = df.copy()
+#     df['symbol'] = symbol
+#     combined.append(df)
+#
+# full_df = pd.concat(combined)
+# full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+# print("✅ Saved all data to combined_data_pipeline.csv")

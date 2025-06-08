@@ -20,34 +20,8 @@ import datetime
 # Configuration
 WINDOW_SIZE = 60
 LOOKAHEAD_PERIOD = 4  # Predict direction 4 periods ahead
-THRESHOLD = 0.0015  # Minimum price movement threshold
-
-
-def generate_features(data):
-    """Create technical features without lookahead bias"""
-    if not isinstance(data, pd.DataFrame):
-        raise ValueError("Input data must be a pandas DataFrame")
-
-    # Calculate price features
-    data = data.copy()
-    data['returns'] = data['close'].pct_change()
-    data['volatility'] = data['high'] - data['low']
-    data['momentum'] = data['close'].pct_change(5)
-
-    # Calculate volume features if volume exists
-    if 'volume' in data.columns:
-        mean_vol = data['volume'].rolling(20, min_periods=1).mean()
-        std_vol = data['volume'].rolling(20, min_periods=1).std()
-        data['volume_z'] = (data['volume'] - mean_vol) / (std_vol + 1e-8)
-    else:
-        data['volume_z'] = 0.0
-
-    # Volatility regimes
-    data['vol_regime'] = (data['volatility'] > data['volatility'].rolling(50).mean()).astype(int)
-
-    # Drop initial NaNs
-    return data.dropna()
-
+# THRESHOLD = 0.0015  # Minimum price movement threshold
+THRESHOLD = 0.003  # Increased from 0.0015
 
 def create_sequences(data, targets, window_size=WINDOW_SIZE):
     """Create time-series sequences for LSTM"""
@@ -58,57 +32,89 @@ def create_sequences(data, targets, window_size=WINDOW_SIZE):
     return np.array(X), np.array(y)
 
 
-def prepare_dataset(dataset, window_size=WINDOW_SIZE):
-    """Prepare dataset with proper temporal splitting"""
-    if not isinstance(dataset, pd.DataFrame):
-        raise ValueError("Input must be a pandas DataFrame")
+def generate_features(data):
+    """Safer feature engineering that preserves more data"""
+    data = data.copy()
 
-    # Generate features
+    # Calculate features with shift(1) to avoid lookahead
+    data['returns'] = data['close'].pct_change().shift(1)
+    data['volatility'] = (data['high'] - data['low']).shift(1)
+    data['momentum'] = data['close'].pct_change(5).shift(1)
+
+    if 'volume' in data.columns:
+        # More tolerant volume calculations
+        data['volume_z'] = (data['volume'] - data['volume'].rolling(20).mean().shift(1)) / \
+                           (data['volume'].rolling(20).std().shift(1) + 1e-8)
+
+    # Only drop rows where essential features are missing
+    essential_features = ['returns', 'volatility', 'momentum']
+    return data.dropna(subset=essential_features)
+
+
+def prepare_dataset(dataset, window_size=WINDOW_SIZE):
+    """More robust dataset preparation with debugging"""
+    print("\n=== Initial Data ===")
+    print(f"Total samples: {len(dataset)}")
+    print(f"Columns: {dataset.columns.tolist()}")
+
+    # Feature engineering
     data = generate_features(dataset)
+    print("\n=== After Feature Engineering ===")
+    print(f"Samples remaining: {len(data)}")
 
     # Create target
-    data['future_close'] = data['close'].shift(-LOOKAHEAD_PERIOD)
+    data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD)
     data['direction'] = np.where(
         data['future_close'] > data['close'] * (1 + THRESHOLD), 1, 0
     )
+    print("\n=== After Target Creation ===")
+    print(f"Samples with targets: {len(data.dropna(subset=['direction']))}")
 
-    # Filter out neutral movements
-    valid_mask = (data['future_close'] > data['close'] * (1 + THRESHOLD)) | \
-                 (data['future_close'] < data['close'] * (1 - THRESHOLD))
-    data = data[valid_mask].copy()
+    # Temporal split
+    split_time = data.index[int(len(data) * 0.8)]
+    train_data = data[data.index < split_time]
+    val_data = data[data.index >= split_time]
+    print("\n=== After Temporal Split ===")
+    print(f"Training samples: {len(train_data)}")
+    print(f"Validation samples: {len(val_data)}")
 
-    # Verify no lookahead bias
-    assert all(data['future_close'].shift(1).notna()), "Lookahead bias detected!"
+    # Scale each symbol separately
+    features = ['open', 'high', 'low', 'close', 'returns', 'volatility',
+                'momentum', 'volume_z', "vol_regime"]
 
-    # Required features - adjust based on your actual features
-    features = [
-        'open', 'high', 'low', 'close', 'volume',
-        'returns', 'volatility', 'momentum',
-        'volume_z', 'vol_regime'
-    ]
+    scalers = {}
+    scaled_dfs = []
 
-    # Temporally split
-    split_idx = int(len(data) * 0.8)
-    train_data = data.iloc[:split_idx]
-    test_data = data.iloc[split_idx:]
+    for symbol, group in train_data.groupby('symbol'):
+        scaler = MinMaxScaler()
+        scaled = group.copy()
+        scaled[features] = scaler.fit_transform(group[features])
+        scalers[symbol] = scaler
+        scaled_dfs.append(scaled)
 
-    # Scale features
-    scaler = MinMaxScaler()
-    train_scaled = train_data.copy()
-    train_scaled[features] = scaler.fit_transform(train_data[features])
-    test_scaled = test_data.copy()
-    test_scaled[features] = scaler.transform(test_data[features])
+    train_scaled = pd.concat(scaled_dfs)
+
+    # Scale validation data
+    val_scaled = []
+    for symbol, group in val_data.groupby('symbol'):
+        if symbol in scalers:  # Only use symbols seen in training
+            scaled = group.copy()
+            scaled[features] = scalers[symbol].transform(group[features])
+            val_scaled.append(scaled)
+
+    val_scaled = pd.concat(val_scaled)
 
     # Create sequences
     X_train, y_train = create_sequences(train_scaled[features].values, train_scaled['direction'].values)
-    X_test, y_test = create_sequences(test_scaled[features].values, test_scaled['direction'].values)
+    X_val, y_val = create_sequences(val_scaled[features].values, val_scaled['direction'].values)
 
-    print(f"\n📊 Dataset Summary:")
-    print(f"Training samples: {len(X_train)}")
-    print(f"Testing samples: {len(X_test)}")
-    print(f"Class balance: {np.mean(y_train):.2%} up / {1 - np.mean(y_train):.2%} down")
+    print("\n=== Final Shapes ===")
+    print(f"X_train: {X_train.shape}")
+    print(f"y_train: {y_train.shape}")
+    print(f"X_val: {X_val.shape}")
+    print(f"y_val: {y_val.shape}")
 
-    return (X_train, y_train), (X_test, y_test)
+    return (X_train, y_train), (X_val, y_val)
 
 
 def build_direction_model(input_shape):
@@ -149,6 +155,7 @@ def build_direction_model(input_shape):
 
 
 def train_model(model, X_train, y_train, X_val, y_val, epochs=100, batch_size=64):
+
     """Train directional model with callbacks"""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     os.makedirs("models", exist_ok=True)

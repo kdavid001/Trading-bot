@@ -30,6 +30,63 @@ class DataFetcher:
             time.sleep(self.min_call_interval - elapsed)
         self.last_api_call = time.time()
 
+    def _clean_data(self, data):
+        """Standardize and clean financial data"""
+        df = data.copy()
+
+        # Convert index to datetime if it's not already
+        if not isinstance(df.index, pd.DatetimeIndex):
+            # First try to find a date column
+            if 'Date' in df.columns:
+                df = df.set_index('Date')
+            elif 'date' in df.columns:
+                df = df.set_index('date')
+            elif 'datetime' in df.columns:
+                df = df.set_index('datetime')
+            else:
+                # If no date column found, try to convert the index
+                try:
+                    df.index = pd.to_datetime(df.index)
+                except:
+                    # Last resort - create a dummy datetime index
+                    df.index = pd.to_datetime(pd.RangeIndex(start=0, stop=len(df)))
+
+        # Ensure we have OHLC columns
+        column_map = {
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Volume': 'volume',
+            'Adj Close': 'close',
+            '1. open': 'open',
+            '2. high': 'high',
+            '3. low': 'low',
+            '4. close': 'close',
+            '5. volume': 'volume'
+        }
+
+        df = df.rename(columns=column_map)
+
+        # Keep only the columns we need
+        required_cols = ['open', 'high', 'low', 'close']
+        available_cols = [col for col in required_cols if col in df.columns]
+
+        return df[available_cols].sort_index().ffill().dropna()
+
+    col_map = {
+        'Open': 'open',
+        'High': 'high',
+        'Low': 'low',
+        'Close': 'close',
+        'Volume': 'volume',
+        'Adj Close': 'close',
+        '1. open': 'open',
+        '2. high': 'high',
+        '3. low': 'low',
+        '4. close': 'close',
+        '5. volume': 'volume'
+    }
     def get_market_data(self, symbol, interval='daily', lookback_years=5):
         """
         Fetch OHLCV data with historical depth
@@ -226,35 +283,20 @@ class DataFetcher:
             return self._get_yfinance_data(symbol, interval, 1)
 
     def _clean_data(self, data):
-        """Standardize and clean financial data"""
-        if data.empty:
-            return pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume'])
-
-        # Create copy to avoid SettingWithCopyWarning
+        """More robust data cleaning"""
         df = data.copy()
 
         # Convert index to datetime
-        try:
-            df.index = pd.to_datetime(df.index)
-            df = df.sort_index()
-        except:
+        if not isinstance(df.index, pd.DatetimeIndex):
             try:
-                df.reset_index(inplace=True)
-                if 'Date' in df.columns:
-                    df['Date'] = pd.to_datetime(df['Date'])
-                    df.set_index('Date', inplace=True)
-                elif 'index' in df.columns:
-                    df['index'] = pd.to_datetime(df['index'])
-                    df.set_index('index', inplace=True)
-                elif 'datetime' in df.columns:
-                    df['datetime'] = pd.to_datetime(df['datetime'])
-                    df.set_index('datetime', inplace=True)
-                df = df.sort_index()
+                df.index = pd.to_datetime(df.index)
             except:
                 df = df.reset_index(drop=True)
+                df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+                df = df.set_index('datetime')
 
-        # Handle different column naming conventions
-        column_map = {
+        # Standardize columns
+        col_map = {
             'Open': 'open',
             'High': 'high',
             'Low': 'low',
@@ -265,33 +307,29 @@ class DataFetcher:
             '2. high': 'high',
             '3. low': 'low',
             '4. close': 'close',
-            '5. volume': 'volume',
-            'open': 'open',
-            'high': 'high',
-            'low': 'low',
-            'close': 'close',
-            'volume': 'volume'
+            '5. volume': 'volume'
         }
+        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
-        df = df.rename(columns={k: v for k, v in column_map.items() if k in df.columns})
-
-        # Convert numeric columns
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
-        for col in numeric_cols:
+        # Ensure numeric values
+        for col in ['open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Forward-fill missing values and drop any remaining NaNs
+        # Forward fill then drop remaining NAs
         df = df.ffill().dropna()
 
-        # Ensure we have the required columns
-        return df[['open', 'high', 'low', 'close', 'volume']] if all(col in df.columns for col in numeric_cols) else df
+        # Ensure OHLC columns exist
+        if not all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+            raise ValueError("Missing required OHLC columns after cleaning")
+
+        return df[['open', 'high', 'low', 'close', 'volume']]
 
     def get_news(self, query, lookback_days=7):
         """Fetch financial news articles with improved error handling"""
         if not self.newsapi:
             print("⚠️ NewsAPI not configured")
-            return []
+            return pd.DataFrame()  # Return empty DataFrame instead of list
 
         try:
             self._rate_limit()
@@ -314,16 +352,18 @@ class DataFetcher:
                     page_size=50
                 )['articles']
 
-            return [{
-                'title': a.get('title', 'No title'),
-                'description': a.get('description', '')[:200] + '...' if a.get('description') else '',
-                'published': a.get('publishedAt', ''),
-                'url': a.get('url', '')
-            } for a in articles]
+            # Convert to DataFrame with proper datetime index
+            if articles:
+                news_df = pd.DataFrame(articles)
+                news_df['publishedAt'] = pd.to_datetime(news_df['publishedAt'])
+                news_df = news_df.set_index('publishedAt')
+                news_df['sentiment'] = 0.0  # Placeholder for sentiment
+                return news_df[['title', 'sentiment']]  # Return only needed columns
+            return pd.DataFrame()  # Return empty DataFrame if no articles
 
         except Exception as e:
             print(f"❌ News fetch error: {str(e)}")
-            return []
+            return pd.DataFrame()  # Return empty DataFrame on error
 
 
 # Enhanced example usage
