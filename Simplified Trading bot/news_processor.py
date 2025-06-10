@@ -23,10 +23,17 @@ class NewsProcessor:
         """Process list of news articles"""
         sentiment_scores = []
         for article in articles:
+
             text = f"{article['title']}. {article['description']}"
             sentiment_scores.append(self.analyze_sentiment(text))
         return sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
 
 
-# News = NewsProcessor()
-# News.process_news_batch([])
+#
+# if __name__ == "__main__":
+#     News = NewsProcessor()
+#     sample_articles = [
+#         {"title": "Stock Market Rises", "description": "Investors are optimistic about economic growth."},
+#         # {"title": "Oil Prices Drop", "description": "Global demand for oil weakens."}
+#     ]
+#     print(News.process_news_batch(sample_articles))

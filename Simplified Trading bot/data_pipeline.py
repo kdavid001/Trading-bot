@@ -135,7 +135,6 @@ def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     return full_df
 
 
-# Add this new function to validate the combined dataset
 def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1000) -> pd.DataFrame:
     """Validate the combined dataset meets minimum requirements"""
     if not isinstance(full_df.index, pd.DatetimeIndex):
@@ -156,19 +155,19 @@ def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1
     return full_df.sort_index()
 
 
-# assets = [
-#     {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-#     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-#     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-# ]
-# data = build_dataset(assets)
-# # print(f"This is from the build_dataset function : \n {data}")
-# combined = []
-# for symbol, df in data.items():
-#     df = df.copy()
-#     df['symbol'] = symbol
-#     combined.append(df)
-#
-# full_df = pd.concat(combined)
-# full_df.to_csv("data/combined_data_pipeline.csv", index=True)
-# print("✅ Saved all data to combined_data_pipeline.csv")
+assets = [
+    {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+    {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+    # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+]
+data = build_dataset(assets)
+# print(f"This is from the build_dataset function : \n {data}")
+combined = []
+for symbol, df in data.items():
+    df = df.copy()
+    df['symbol'] = symbol
+    combined.append(df)
+
+full_df = pd.concat(combined)
+full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+print("✅ Saved all data to combined_data_pipeline.csv")

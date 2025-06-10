@@ -8,27 +8,78 @@ from newsapi import NewsApiClient
 from config import CONFIG
 import time
 from datetime import datetime, timedelta
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class DataFetcher:
     def __init__(self):
         # Initialize APIs with rate limiting protection
-        self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
-        self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
-        self.td = TDClient(apikey=CONFIG.get('twelvedata', '')) if CONFIG.get('twelvedata') else None
-        self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
+        # self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
+        # self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
+        # self.td = TDClient(apikey=CONFIG.get('twelvedata', '')) if CONFIG.get('twelvedata') else None
+        # self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
+
+        # self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
+        # self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
+        # self.td = TDClient(apikey=CONFIG.get('twelvedata', '')) if CONFIG.get('twelvedata') else None
+        # self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
+        #
+        #
+        # self.last_api_call = time.time()
+        # self.min_call_interval = 15  # Seconds between API calls
+        # self.max_historical_points = 5000  # Max data points per API request
+        # self.yfinance_fallback = True  # Use yfinance when other APIs fail
+        self.api_status = {
+            'alpha_vantage': False,
+            'twelvedata': False,
+            'newsapi': False,
+            'yfinance': True  # Always available
+        }
+
+        try:
+            self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
+            self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
+            if self.av_fx:
+                self.api_status['alpha_vantage'] = True
+        except Exception as e:
+            logger.warning(f"Alpha Vantage initialization failed: {e}")
+
+        try:
+            self.td = TDClient(apikey=CONFIG.get('twelvedata', '')) if CONFIG.get('twelvedata') else None
+            if self.td:
+                self.api_status['twelvedata'] = True
+        except Exception as e:
+            logger.warning(f"TwelveData initialization failed: {e}")
+
+        try:
+            self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
+            if self.newsapi:
+                self.api_status['newsapi'] = True
+        except Exception as e:
+            logger.warning(f"NewsAPI initialization failed: {e}")
 
         self.last_api_call = time.time()
-        self.min_call_interval = 15  # Seconds between API calls
-        self.max_historical_points = 5000  # Max data points per API request
-        self.yfinance_fallback = True  # Use yfinance when other APIs fail
+        self.min_call_interval = 5  # Reduced from 15 to 5 seconds
+        self.max_historical_points = 5000
+        self.yfinance_fallback = True
 
     def _rate_limit(self):
-        """Enforce API rate limits"""
+        """Enforce API rate limits with better feedback"""
         elapsed = time.time() - self.last_api_call
         if elapsed < self.min_call_interval:
-            time.sleep(self.min_call_interval - elapsed)
+            wait_time = self.min_call_interval - elapsed
+            logger.info(f"Rate limiting: Waiting {wait_time:.1f} seconds before next API call")
+            time.sleep(wait_time)
         self.last_api_call = time.time()
+
+    # def _rate_limit(self):
+    #     """Enforce API rate limits"""
+    #     elapsed = time.time() - self.last_api_call
+    #     if elapsed < self.min_call_interval:
+    #         time.sleep(self.min_call_interval - elapsed)
+    #     self.last_api_call = time.time()
 
     def _clean_data(self, data):
         """Standardize and clean financial data"""
@@ -329,12 +380,14 @@ class DataFetcher:
         """Fetch financial news articles with improved error handling"""
         if not self.newsapi:
             print("⚠️ NewsAPI not configured")
-            return pd.DataFrame()  # Return empty DataFrame instead of list
-
+            return pd.DataFrame()
+            # Return empty DataFrame instead of list
+        else:
+            print("news step 1: done")
         try:
             self._rate_limit()
             from_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
-
+            print("news step 2: done")
             # Try general query first
             try:
                 articles = self.newsapi.get_everything(
@@ -344,6 +397,8 @@ class DataFetcher:
                     from_param=from_date,
                     page_size=50
                 )['articles']
+                print("news step 3: done")
+
             except:
                 # Fallback to top headlines if everything fails
                 articles = self.newsapi.get_top_headlines(
@@ -358,6 +413,7 @@ class DataFetcher:
                 news_df['publishedAt'] = pd.to_datetime(news_df['publishedAt'])
                 news_df = news_df.set_index('publishedAt')
                 news_df['sentiment'] = 0.0  # Placeholder for sentiment
+                print("news step 4: done")
                 return news_df[['title', 'sentiment']]  # Return only needed columns
             return pd.DataFrame()  # Return empty DataFrame if no articles
 
@@ -366,7 +422,7 @@ class DataFetcher:
             return pd.DataFrame()  # Return empty DataFrame on error
 
 
-# Enhanced example usage
+# # Enhanced example usage
 if __name__ == "__main__":
     fetcher = DataFetcher()
 
@@ -383,11 +439,11 @@ if __name__ == "__main__":
     if not eur_data.empty:
         print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
 
-    print("\nAAPL (10 years monthly):")
-    aapl_data = fetcher.get_market_data('AAPL', interval='monthly', lookback_years=10)
-    print(f"Retrieved {len(aapl_data)} monthly bars")
-    if not aapl_data.empty:
-        print(f"From {aapl_data.index[0].date()} to {aapl_data.index[-1].date()}")
+    # print("\nAAPL (10 years monthly):")
+    # aapl_data = fetcher.get_market_data('AAPL', interval='monthly', lookback_years=10)
+    # print(f"Retrieved {len(aapl_data)} monthly bars")
+    # if not aapl_data.empty:
+    #     print(f"From {aapl_data.index[0].date()} to {aapl_data.index[-1].date()}")
 
     print("\n=== Intraday Data Test ===")
     print("SPY (15min intervals):")
@@ -397,5 +453,31 @@ if __name__ == "__main__":
     print("\n=== News Test ===")
     news = fetcher.get_news('stock market', lookback_days=3)
     print(f"Retrieved {len(news)} news articles")
-    if news:
-        print(f"First article: {news[0]['title']}")
+    if not news.empty:
+        print(f"First article: {news.iloc[3]['title']}")
+# if __name__ == "__main__":
+#     fetcher = DataFetcher()
+#     print("\nAPI Status:")
+#     for api, status in fetcher.api_status.items():
+#         print(f"{api}: {'✔️' if status else '❌'}")
+#
+#     # Test each source with smaller requests
+#     test_symbols = [
+#         ('BTC/USD', 'daily', 1),  # 1 year instead of 5
+#         ('EUR/USD', 'weekly', 1),
+#         ('AAPL', 'monthly', 2),
+#         ('SPY', '15min', None)
+#     ]
+#
+#     for symbol, interval, years in test_symbols:
+#         print(f"\nTesting {symbol} ({interval})...")
+#         try:
+#             data = fetcher.get_market_data(symbol, interval, years if years else 1)
+#             print(f"Retrieved {len(data)} rows")
+#             if not data.empty:
+#                 print(f"Date range: {data.index[0]} to {data.index[-1]}")
+#                 print(data.head(3))
+#             else:
+#                 print("Empty DataFrame returned")
+#         except Exception as e:
+#             print(f"Failed with error: {str(e)}")
