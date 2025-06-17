@@ -20,7 +20,7 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
     """
     fetcher = DataFetcher()
     engineer = FeatureEngineer()
-    processor = NewsProcessor()
+    news_processor = NewsProcessor()
     datasets = {}
 
 
@@ -46,26 +46,64 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
                 print(f"ℹ️ Converting index to datetime for {symbol}")
                 market_data.index = pd.to_datetime(market_data.index)
 
-
             # 2. Fetch and process news (time-aligned)
             news = fetcher.get_news(asset['news_query'])
-            if not news.empty:  # Now safe to check .empty
-                # Resample to align with market data frequency
-                sentiment = news['sentiment'].resample('D').mean().ffill()
 
-                # Merge with market data
+            if not news.empty:
+                print(f"📰 Processing {len(news)} news articles for {symbol}")
+
+                # 1. Check for required columns and create fallbacks if missing
+                if 'description' not in news.columns:
+                    print("⚠️ 'description' column missing - using empty strings")
+                    news['description'] = ""
+
+                # if 'title' not in news.columns:
+                #     print("⚠️ 'title' column missing - cannot process sentiment")
+                #     market_data['news_sentiment'] = 0.0
+                #     print("Taken to 0")
+                #     return market_data
+
+                # 2. Prepare articles safely
+                articles_to_process = []
+                for _, row in news.iterrows():
+                    articles_to_process.append({
+                        'title': str(row.get('title', '')),
+                        'description': str(row.get('description', ''))
+                    })
+
+                # 3. Process in batches with error handling
+                batch_size = 100
+                sentiments = []
+
+                for i in range(0, len(articles_to_process), batch_size):
+                    batch = articles_to_process[i:i + batch_size]
+                    try:
+                        batch_sentiments = news_processor.process_news_batch(batch)
+                        sentiments.extend(batch_sentiments)
+                    except Exception as e:
+                        print(f"⚠️ Error processing batch {i // batch_size + 1}: {str(e)}")
+                        sentiments.extend([0.0] * len(batch))  # Neutral fallback
+
+                # 4. Add sentiments to DataFrame
+                news['sentiment'] = sentiments
+
+                # 5. Process sentiment timeline
+                news.index = pd.to_datetime(news.index)
+                daily_sentiment = news['sentiment'].resample('D').mean().ffill()
+
+                # 6. Merge with market data
                 market_data = market_data.merge(
-                    sentiment,
+                    daily_sentiment.rename('news_sentiment'),
                     left_index=True,
                     right_index=True,
-                    how='left',
-                    suffixes=('', '_news')
+                    how='left'
                 )
-                market_data['news_sentiment'] = market_data['sentiment'].ffill().fillna(0)
+                market_data['news_sentiment'] = market_data['news_sentiment'].fillna(0)
+
+                print(f"✅ Added news sentiment ({daily_sentiment.notna().sum()} days with sentiment)")
             else:
                 print(f"⚠️ No news data for {symbol}")
                 market_data['news_sentiment'] = 0.0
-
             # 3. Feature engineering
             processed_data = engineer.add_technical_features(market_data)
             if processed_data.empty:

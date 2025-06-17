@@ -29,7 +29,7 @@ class NewsProcessor:
         return sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
 
 
-#
+
 # if __name__ == "__main__":
 #     News = NewsProcessor()
 #     sample_articles = [
