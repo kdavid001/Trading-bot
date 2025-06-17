@@ -42,3 +42,8 @@ Precision > 40% (2.5x better than random)
 Volatility Prediction:
 
 Validation loss < 0.05 (5% error)
+
+
+
+Remove the news sentiment from the data prediction it should only  rely on the news after it has made its prediction. 
+

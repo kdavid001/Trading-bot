@@ -193,11 +193,21 @@ def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1
     return full_df.sort_index()
 
 
+# assets = [
+#     {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+#     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+#     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+# ]
+
 assets = [
-    {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-    {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-    # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-]
+            {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+            {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+            {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
+            # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
+            # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
+            # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
+        ]
+
 data = build_dataset(assets)
 # print(f"This is from the build_dataset function : \n {data}")
 combined = []

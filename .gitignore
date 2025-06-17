@@ -10,8 +10,8 @@ __pycache__/
 *.json
 
 # Local CSV data files
-models
-logs
-data
-test_fetcher.py
+Complex model - not functional/models
+Complex model - not functional/logs
+Complex model - not functional/data
+Complex model - not functional/test_fetcher.py
 
