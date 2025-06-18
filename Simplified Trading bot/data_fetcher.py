@@ -9,35 +9,19 @@ from config import CONFIG
 import time
 from datetime import datetime, timedelta
 import logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class DataFetcher:
     def __init__(self):
-        # Initialize APIs with rate limiting protection
-        # self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
-        # self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
-        # self.td = TDClient(apikey=CONFIG.get('twelvedata', '')) if CONFIG.get('twelvedata') else None
-        # self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
-
-        # self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
-        # self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
-        # self.td = TDClient(apikey=CONFIG.get('twelvedata', '')) if CONFIG.get('twelvedata') else None
-        # self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
-        #
-        #
-        # self.last_api_call = time.time()
-        # self.min_call_interval = 15  # Seconds between API calls
-        # self.max_historical_points = 5000  # Max data points per API request
-        # self.yfinance_fallback = True  # Use yfinance when other APIs fail
         self.api_status = {
             'alpha_vantage': False,
             'twelvedata': False,
             'newsapi': False,
             'yfinance': True  # Always available
         }
-
         try:
             self.av_fx = ForeignExchange(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
             self.av_crypto = CryptoCurrencies(CONFIG.get('alpha_vantage', '')) if CONFIG.get('alpha_vantage') else None
@@ -74,20 +58,12 @@ class DataFetcher:
             time.sleep(wait_time)
         self.last_api_call = time.time()
 
-    # def _rate_limit(self):
-    #     """Enforce API rate limits"""
-    #     elapsed = time.time() - self.last_api_call
-    #     if elapsed < self.min_call_interval:
-    #         time.sleep(self.min_call_interval - elapsed)
-    #     self.last_api_call = time.time()
-
-    def _clean_data(self, data):
-        """Standardize and clean financial data"""
+    def _clean_data(self, data, trading_type):
+        """Unified data cleaning and standardization for different trading types"""
         df = data.copy()
 
-        # Convert index to datetime if it's not already
+        # Convert index to datetime
         if not isinstance(df.index, pd.DatetimeIndex):
-            # First try to find a date column
             if 'Date' in df.columns:
                 df = df.set_index('Date')
             elif 'date' in df.columns:
@@ -95,15 +71,15 @@ class DataFetcher:
             elif 'datetime' in df.columns:
                 df = df.set_index('datetime')
             else:
-                # If no date column found, try to convert the index
                 try:
                     df.index = pd.to_datetime(df.index)
                 except:
-                    # Last resort - create a dummy datetime index
-                    df.index = pd.to_datetime(pd.RangeIndex(start=0, stop=len(df)))
+                    df = df.reset_index(drop=True)
+                    df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+                    df = df.set_index('datetime')
 
-        # Ensure we have OHLC columns
-        column_map = {
+        # Standardize column names
+        col_map = {
             'Open': 'open',
             'High': 'high',
             'Low': 'low',
@@ -116,29 +92,32 @@ class DataFetcher:
             '4. close': 'close',
             '5. volume': 'volume'
         }
+        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
-        df = df.rename(columns=column_map)
+        # Ensure numeric conversion
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Keep only the columns we need
-        required_cols = ['open', 'high', 'low', 'close']
+        # Determine required columns based on trading type
+        if trading_type == 'forex':
+            required_cols = ['open', 'high', 'low', 'close']
+        elif trading_type == 'crypto':
+            required_cols = ['open', 'high', 'low', 'close', 'volume']
+        else:
+            print(f"Trading type {trading_type} not supported\n")
+            print("Defaulting to original OHLCV")
+            required_cols = ['open', 'high', 'low', 'close', 'volume']
+
+        # Keep only available required columns
         available_cols = [col for col in required_cols if col in df.columns]
 
-        return df[available_cols].sort_index().ffill().dropna()
+        # Forward fill and drop NA
+        df = df[available_cols].sort_index().ffill().dropna()
 
-    col_map = {
-        'Open': 'open',
-        'High': 'high',
-        'Low': 'low',
-        'Close': 'close',
-        'Volume': 'volume',
-        'Adj Close': 'close',
-        '1. open': 'open',
-        '2. high': 'high',
-        '3. low': 'low',
-        '4. close': 'close',
-        '5. volume': 'volume'
-    }
-    def get_market_data(self, symbol, interval='daily', lookback_years=5):
+        return df
+
+    def get_market_data(self, symbol, lookback_years, trading_type, interval='daily', ):
         """
         Fetch OHLCV data with historical depth
         Args:
@@ -154,9 +133,9 @@ class DataFetcher:
                 return self._get_intraday_data(symbol, interval)
         except Exception as e:
             print(f"❌ yfinance failed: {e}. Falling back to other APIs...")
-            return self._get_data_with_fallback(symbol, interval, lookback_years)
+            return self._get_data_with_fallback(symbol, interval, lookback_years, trading_type)
 
-    def _get_data_with_fallback(self, symbol, interval, lookback_years):
+    def _get_data_with_fallback(self, symbol, interval, lookback_years, trading_type):
         """Fallback method when yfinance fails"""
         try:
             # For daily/weekly/monthly data
@@ -190,7 +169,7 @@ class DataFetcher:
                         ).as_pandas()
 
                         if not data.empty:
-                            return self._clean_data(data)
+                            return self._clean_data(data, trading_type)
                     except Exception as e:
                         print(f"⚠️ TwelveData failed: {e}")
 
@@ -202,7 +181,7 @@ class DataFetcher:
                             data, _ = self.av_crypto.get_digital_currency_daily(
                                 symbol=base, market='USD'
                             )
-                            return self._clean_data(pd.DataFrame(data).transpose())
+                            return self._clean_data(pd.DataFrame(data).transpose(), trading_type)
                         except Exception as e:
                             print(f"⚠️ Alpha Vantage failed: {e}")
 
@@ -213,7 +192,7 @@ class DataFetcher:
             print(f"❌ All data sources failed for {symbol}: {e}")
             return pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume'])
 
-    def _get_yfinance_data(self, symbol, interval, years):
+    def _get_yfinance_data(self, symbol, interval, years, trading_type):
         """Fetch data using yfinance (most reliable for historical data)"""
         # Convert symbol to yfinance format
         if '/' in symbol:
@@ -278,7 +257,7 @@ class DataFetcher:
         if data.empty:
             raise ValueError(f"yfinance returned empty dataset for {yf_symbol}")
 
-        return self._clean_data(data)
+        return self._clean_data(data, trading_type)
 
     def _get_intraday_data(self, symbol, interval):
         """Fetch intraday data with point-based lookback"""
@@ -333,49 +312,6 @@ class DataFetcher:
             print(f"⚠️ Intraday fetch failed: {e}")
             return self._get_yfinance_data(symbol, interval, 1)
 
-    def _clean_data(self, data):
-        """More robust data cleaning"""
-        df = data.copy()
-
-        # Convert index to datetime
-        if not isinstance(df.index, pd.DatetimeIndex):
-            try:
-                df.index = pd.to_datetime(df.index)
-            except:
-                df = df.reset_index(drop=True)
-                df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
-                df = df.set_index('datetime')
-
-        # Standardize columns
-        col_map = {
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume',
-            'Adj Close': 'close',
-            '1. open': 'open',
-            '2. high': 'high',
-            '3. low': 'low',
-            '4. close': 'close',
-            '5. volume': 'volume'
-        }
-        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-
-        # Ensure numeric values
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-
-        # Forward fill then drop remaining NAs
-        df = df.ffill().dropna()
-
-        # Ensure OHLC columns exist
-        if not all(col in df.columns for col in ['open', 'high', 'low', 'close']):
-            raise ValueError("Missing required OHLC columns after cleaning")
-
-        return df[['open', 'high', 'low', 'close', 'volume']]
-
     def get_news(self, query, lookback_days=7):
         """Fetch financial news articles with improved error handling"""
         if not self.newsapi:
@@ -421,63 +357,31 @@ class DataFetcher:
             print(f"❌ News fetch error: {str(e)}")
             return pd.DataFrame()  # Return empty DataFrame on error
 
-
-# # Enhanced example usage
-if __name__ == "__main__":
-    fetcher = DataFetcher()
-
-    print("\n=== Historical Data Test ===")
-    print("BTC/USD (5 years daily):")
-    btc_data = fetcher.get_market_data('BTC/USD', interval='daily', lookback_years=5)
-    print(f"Retrieved {len(btc_data)} daily bars")
-    if not btc_data.empty:
-        print(f"From {btc_data.index[0].date()} to {btc_data.index[-1].date()}")
-
-    print("\nEUR/USD (3 years weekly):")
-    eur_data = fetcher.get_market_data('EUR/USD', interval='weekly', lookback_years=3)
-    print(f"Retrieved {len(eur_data)} weekly bars")
-    if not eur_data.empty:
-        print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
-
-    # print("\nAAPL (10 years monthly):")
-    # aapl_data = fetcher.get_market_data('AAPL', interval='monthly', lookback_years=10)
-    # print(f"Retrieved {len(aapl_data)} monthly bars")
-    # if not aapl_data.empty:
-    #     print(f"From {aapl_data.index[0].date()} to {aapl_data.index[-1].date()}")
-
-    print("\n=== Intraday Data Test ===")
-    print("SPY (15min intervals):")
-    spy_data = fetcher.get_market_data('SPY', interval='15min')
-    print(f"Retrieved {len(spy_data)} intraday bars")
-
-    print("\n=== News Test ===")
-    news = fetcher.get_news('stock market', lookback_days=3)
-    print(f"Retrieved {len(news)} news articles")
-    if not news.empty:
-        print(f"First article: {news.iloc[3]['title']}")
+# example usage
 # if __name__ == "__main__":
 #     fetcher = DataFetcher()
-#     print("\nAPI Status:")
-#     for api, status in fetcher.api_status.items():
-#         print(f"{api}: {'✔️' if status else '❌'}")
 #
-#     # Test each source with smaller requests
-#     test_symbols = [
-#         ('BTC/USD', 'daily', 1),  # 1 year instead of 5
-#         ('EUR/USD', 'weekly', 1),
-#         ('AAPL', 'monthly', 2),
-#         ('SPY', '15min', None)
-#     ]
+#     print("\n=== Historical Data Test ===")
+#     print("BTC/USD (5 years daily):")
+#     btc_data = fetcher.get_market_data('BTC/USD', interval='daily', lookback_years=5)
+#     print(f"Retrieved {len(btc_data)} daily bars")
+#     if not btc_data.empty:
+#         print(f"From {btc_data.index[0].date()} to {btc_data.index[-1].date()}")
 #
-#     for symbol, interval, years in test_symbols:
-#         print(f"\nTesting {symbol} ({interval})...")
-#         try:
-#             data = fetcher.get_market_data(symbol, interval, years if years else 1)
-#             print(f"Retrieved {len(data)} rows")
-#             if not data.empty:
-#                 print(f"Date range: {data.index[0]} to {data.index[-1]}")
-#                 print(data.head(3))
-#             else:
-#                 print("Empty DataFrame returned")
-#         except Exception as e:
-#             print(f"Failed with error: {str(e)}")
+#     print("\nEUR/USD (3 years weekly):")
+#     eur_data = fetcher.get_market_data('EUR/USD', interval='weekly', lookback_years=3)
+#     print(f"Retrieved {len(eur_data)} weekly bars")
+#     if not eur_data.empty:
+#         print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
+#
+#     print("\n=== Intraday Data Test ===")
+#     print("SPY (15min intervals):")
+#     spy_data = fetcher.get_market_data('SPY', interval='15min')
+#     print(f"Retrieved {len(spy_data)} intraday bars")
+#
+#     print("\n=== News Test ===")
+#     news = fetcher.get_news('stock market', lookback_days=3)
+#     print(f"Retrieved {len(news)} news articles")
+#     if not news.empty:
+#         print(f"First article: {news.iloc[3]['title']}")
+#

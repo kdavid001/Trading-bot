@@ -10,10 +10,12 @@ import pandas_ta as pta
 import numpy as np
 from typing import Dict, List
 
+from pandas import DataFrame
+
 
 class FeatureEngineer:
     @staticmethod
-    def add_technical_features(df: pd.DataFrame) -> pd.DataFrame:
+    def add_technical_features(df: pd.DataFrame) -> DataFrame | str:
         """
         Robust technical feature engineering with error handling
         """
@@ -32,11 +34,12 @@ class FeatureEngineer:
         try:
             # 1. Price Transformations (safe calculations)
             df['returns'] = df['close'].pct_change().shift(1)
-            df['log_returns'] = np.log(df['close'] / df['close'].shift(1)).shift(1)
+            # df['log_returns'] = np.log(df['close'] / df['close'].shift(1)).shift(1)
             df['volatility'] = df['close'].rolling(20).std().shift(1)
 
             # 2. Volume Features (with validation)
             if 'volume' in df.columns and not df['volume'].isnull().all():
+                print("yes volumn exist")
                 df['volume_pct'] = df['volume'].pct_change().shift(1)
                 vol_ma = df['volume'].rolling(20).mean().shift(1)
                 df['volume_ma_ratio'] = (df['volume'] / vol_ma).replace([np.inf, -np.inf], 1)
@@ -48,6 +51,7 @@ class FeatureEngineer:
                 df['volume_ma_ratio'] = 1
                 df['obv'] = 0
                 df['volume_z'] = 0
+                # return "there is something wrong with the volume column"
 
             # 3. Momentum Indicators (with MACD fix)
             df['momentum'] = df['close'].pct_change(5).shift(1)

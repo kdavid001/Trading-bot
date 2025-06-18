@@ -72,8 +72,8 @@ def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     return full_df
 
 def main():
+    global assets
     try:
-        # Configuration
         # assets = [
         #     {'symbol': 'BTC-USD', 'news_query': 'Bitcoin'},
         #     {'symbol': 'EURUSD=X', 'news_query': 'EUR USD'},
@@ -84,22 +84,32 @@ def main():
         #     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
         #     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
         # ]
-        assets = [
-            {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
-            {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
-            {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
-            # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
-            # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
-            # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
-        ]
+        trading_type = "forex"
+        if trading_type == "forex":
+            assets = [
+                {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+                # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+                # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
+                # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
+                # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
+                # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
+            ]
+        elif trading_type == "crypto":
+            assets = [
+                {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+                # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+                # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+            ]
+
         window_size = 60
         epochs = 150
         batch_size = 128
         min_samples = 1000  # Minimum samples per asset
+        lookback_years = 5
 
         # Step 1: Build dataset
         print("🛠️ Building dataset...")
-        raw_datasets = build_dataset(assets)
+        raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
         print(f"✅ Dataset built for {len(raw_datasets)} assets")
         # In your main() function, after building the dataset:
         print("\n=== Data Sample ===")

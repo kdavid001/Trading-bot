@@ -5,7 +5,7 @@ import pandas as pd
 from typing import List, Dict
 
 
-def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
+def build_dataset(assets: List[Dict[str, str]], lookback_years, trading_type) -> Dict[str, pd.DataFrame]:
     """
     Creates unified dataset with market data and news sentiment
 
@@ -31,14 +31,14 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
 
         try:
             # 1. Fetch and validate market data
-            market_data = fetcher.get_market_data(symbol)
+            market_data = fetcher.get_market_data(symbol, lookback_years=lookback_years, trading_type=trading_type)
             processed_data = engineer.add_technical_features(market_data)
             if market_data.empty:
                 print(f"❌ Empty market data for {symbol} - skipping")
                 continue
 
-            if not {'open', 'high', 'low', 'close'}.issubset(market_data.columns):
-                print(f"❌ Missing OHLC columns for {symbol}")
+            if not {'open', 'high', 'low', 'close', 'volume'}.issubset(market_data.columns):
+                print(f"❌ Missing OHLCv columns for {symbol}")
                 continue
 
             # Check for datetime index
@@ -131,15 +131,15 @@ def build_dataset(assets: List[Dict[str, str]]) -> Dict[str, pd.DataFrame]:
     if not datasets:
         raise ValueError("❌ No valid datasets were created - check previous error messages")
 
-    # # Dataset quality report
-    # print("\n=== Dataset Quality Report ===")
-    # for symbol, df in datasets.items():
-    #     print(f"\n📊 {symbol}:")
-    #     print(f"Time range: {df.index.min()} to {df.index.max()}")
-    #     print(f"Rows: {len(df)} | Columns: {len(df.columns)}")
-    #     print(f"Missing values: {df.isna().sum().sum()}")
-    #     if 'news_sentiment' in df.columns:
-    #         print(f"Sentiment range: {df['news_sentiment'].min():.2f} to {df['news_sentiment'].max():.2f}")
+    # Dataset quality report
+    print("\n=== Dataset Quality Report ===")
+    for symbol, df in datasets.items():
+        print(f"\n📊 {symbol}:")
+        print(f"Time range: {df.index.min()} to {df.index.max()}")
+        print(f"Rows: {len(df)} | Columns: {len(df.columns)}")
+        print(f"Missing values: {df.isna().sum().sum()}")
+        if 'news_sentiment' in df.columns:
+            print(f"Sentiment range: {df['news_sentiment'].min():.2f} to {df['news_sentiment'].max():.2f}")
 
     return datasets
 
@@ -193,22 +193,22 @@ def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1
     return full_df.sort_index()
 
 
-# assets = [
-#     {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+assets = [
+    {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
 #     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
 #     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-# ]
-
-assets = [
-            {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
-            {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
-            {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
+]
+#
+# assets = [
+            # {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+            # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+            # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
             # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
             # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
             # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
-        ]
+        # ]
 
-data = build_dataset(assets)
+data = build_dataset(assets, lookback_years=1)
 # print(f"This is from the build_dataset function : \n {data}")
 combined = []
 for symbol, df in data.items():
