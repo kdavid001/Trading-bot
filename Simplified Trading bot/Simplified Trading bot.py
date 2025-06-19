@@ -156,6 +156,7 @@ def main():
             model,
             X_train, y_train,
             X_val, y_val,
+            trading_type,
             epochs=epochs,
             batch_size=batch_size
         )

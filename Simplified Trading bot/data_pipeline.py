@@ -5,7 +5,7 @@ import pandas as pd
 from typing import List, Dict
 
 
-def build_dataset(assets: List[Dict[str, str]], lookback_years, trading_type) -> Dict[str, pd.DataFrame]:
+def build_dataset(assets: List[Dict[str, str]], lookback_years: int, trading_type: str):
     """
     Creates unified dataset with market data and news sentiment
 
@@ -37,9 +37,9 @@ def build_dataset(assets: List[Dict[str, str]], lookback_years, trading_type) ->
                 print(f"❌ Empty market data for {symbol} - skipping")
                 continue
 
-            if not {'open', 'high', 'low', 'close', 'volume'}.issubset(market_data.columns):
-                print(f"❌ Missing OHLCv columns for {symbol}")
-                continue
+            # if not {'open', 'high', 'low', 'close', 'volume'}.issubset(market_data.columns):
+            #     print(f"❌ Missing OHLCv columns for {symbol}")
+            #     continue
 
             # Check for datetime index
             if not isinstance(market_data.index, pd.DatetimeIndex):
@@ -192,30 +192,31 @@ def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1
 
     return full_df.sort_index()
 
+if __name__ == "__main__":
+    trading_type = 'forex'
+    # assets = [
+        # {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+    #     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+    #     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+    # ]
+    #
+    assets = [
+                {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+                # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+                # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
+                # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
+                # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
+                # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
+            ]
 
-assets = [
-    {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-#     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-#     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-]
-#
-# assets = [
-            # {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
-            # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
-            # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
-            # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
-            # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
-            # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
-        # ]
+    data = build_dataset(assets, lookback_years=1, trading_type=trading_type)
+    # print(f"This is from the build_dataset function : \n {data}")
+    combined = []
+    for symbol, df in data.items():
+        df = df.copy()
+        df['symbol'] = symbol
+        combined.append(df)
 
-data = build_dataset(assets, lookback_years=1)
-# print(f"This is from the build_dataset function : \n {data}")
-combined = []
-for symbol, df in data.items():
-    df = df.copy()
-    df['symbol'] = symbol
-    combined.append(df)
-
-full_df = pd.concat(combined)
-full_df.to_csv("data/combined_data_pipeline.csv", index=True)
-print("✅ Saved all data to combined_data_pipeline.csv")
+    full_df = pd.concat(combined)
+    full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+    print("✅ Saved all data to combined_data_pipeline.csv")

@@ -1,15 +1,9 @@
-import pandas as pd
-import ta
-import pandas_ta as pta
-import numpy as np
-from typing import Optional, Dict, List
-
-import pandas as pd
-import ta
-import pandas_ta as pta
-import numpy as np
 from typing import Dict, List
 
+import numpy as np
+import pandas as pd
+import pandas_ta as pta
+import ta
 from pandas import DataFrame
 
 
@@ -46,13 +40,8 @@ class FeatureEngineer:
                 df['obv'] = ta.volume.on_balance_volume(df['close'], df['volume']).shift(1)
                 df['volume_z'] = FeatureEngineer._zscore(df['volume'], window=20).shift(1)
             else:
-                df['volume'] = 0
-                df['volume_pct'] = 0
-                df['volume_ma_ratio'] = 1
-                df['obv'] = 0
-                df['volume_z'] = 0
+                print("no volumn exist")
                 # return "there is something wrong with the volume column"
-
             # 3. Momentum Indicators (with MACD fix)
             df['momentum'] = df['close'].pct_change(5).shift(1)
             df['rsi'] = ta.momentum.rsi(df['close'], 14).shift(1)

@@ -157,7 +157,7 @@ def build_direction_model(input_shape):
     )
     return model
 
-def train_model(model, X_train, y_train, X_val, y_val, epochs=100, batch_size=64):
+def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100, batch_size=64):
 
     """Train directional model with callbacks"""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -189,6 +189,6 @@ def train_model(model, X_train, y_train, X_val, y_val, epochs=100, batch_size=64
     )
 
     # Save final model
-    model.save(f"models/direction_model_{timestamp}.keras")
+    model.save(f"models/direction_model_{trading_type}_{timestamp}.keras")
     print(f"\n💾 Model saved to: models/direction_model_{timestamp}.keras")
     return model, history

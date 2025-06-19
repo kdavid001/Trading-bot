@@ -117,7 +117,7 @@ class DataFetcher:
 
         return df
 
-    def get_market_data(self, symbol, lookback_years, trading_type, interval='daily', ):
+    def get_market_data(self, symbol, lookback_years, trading_type, interval='daily'):
         """
         Fetch OHLCV data with historical depth
         Args:
@@ -128,9 +128,9 @@ class DataFetcher:
         try:
             # Use yfinance as the primary source for historical data
             if interval in ['daily', 'weekly', 'monthly']:
-                return self._get_yfinance_data(symbol, interval, lookback_years)
+                return self._get_yfinance_data(symbol, interval, lookback_years, trading_type)
             else:
-                return self._get_intraday_data(symbol, interval)
+                return self._get_intraday_data(symbol, interval, trading_type)
         except Exception as e:
             print(f"❌ yfinance failed: {e}. Falling back to other APIs...")
             return self._get_data_with_fallback(symbol, interval, lookback_years, trading_type)
@@ -186,7 +186,7 @@ class DataFetcher:
                             print(f"⚠️ Alpha Vantage failed: {e}")
 
             # For intraday data
-            return self._get_intraday_data(symbol, interval)
+            return self._get_intraday_data(symbol, interval, trading_type)
 
         except Exception as e:
             print(f"❌ All data sources failed for {symbol}: {e}")
@@ -213,8 +213,7 @@ class DataFetcher:
             'monthly': '1mo',
             '15min': '15m',
             '1h': '60m',
-            '4h': '4h',
-            'daily': '1d'
+            '4h': '4h'
         }
         yf_interval = interval_map.get(interval.lower(), interval.lower())
 
@@ -259,7 +258,7 @@ class DataFetcher:
 
         return self._clean_data(data, trading_type)
 
-    def _get_intraday_data(self, symbol, interval):
+    def _get_intraday_data(self, symbol, interval, trading_type):
         """Fetch intraday data with point-based lookback"""
         try:
             # First try TwelveData
@@ -302,15 +301,15 @@ class DataFetcher:
                     interval=av_interval,
                     outputsize='full'
                 )
-                return self._clean_data(pd.DataFrame(data).transpose())
+                return self._clean_data(pd.DataFrame(data).transpose(), trading_type)
 
             # Fallback to yfinance
             else:
-                return self._get_yfinance_data(symbol, interval, 1)  # 1 year max for intraday
+                return self._get_yfinance_data(symbol, interval, 1, trading_type)  # 1 year max for intraday
 
         except Exception as e:
             print(f"⚠️ Intraday fetch failed: {e}")
-            return self._get_yfinance_data(symbol, interval, 1)
+            return self._get_yfinance_data(symbol, interval, 1, trading_type)
 
     def get_news(self, query, lookback_days=7):
         """Fetch financial news articles with improved error handling"""
