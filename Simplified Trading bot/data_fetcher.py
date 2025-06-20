@@ -1,10 +1,8 @@
-# data_fetcher.py
 import pandas as pd
 import yfinance as yf
 from alpha_vantage.foreignexchange import ForeignExchange
 from alpha_vantage.cryptocurrencies import CryptoCurrencies
 from twelvedata import TDClient
-from newsapi import NewsApiClient
 from config import CONFIG
 import time
 from datetime import datetime, timedelta
@@ -36,13 +34,6 @@ class DataFetcher:
                 self.api_status['twelvedata'] = True
         except Exception as e:
             logger.warning(f"TwelveData initialization failed: {e}")
-
-        try:
-            self.newsapi = NewsApiClient(api_key=CONFIG.get('newsapi', '')) if CONFIG.get('newsapi') else None
-            if self.newsapi:
-                self.api_status['newsapi'] = True
-        except Exception as e:
-            logger.warning(f"NewsAPI initialization failed: {e}")
 
         self.last_api_call = time.time()
         self.min_call_interval = 5  # Reduced from 15 to 5 seconds
@@ -311,50 +302,7 @@ class DataFetcher:
             print(f"⚠️ Intraday fetch failed: {e}")
             return self._get_yfinance_data(symbol, interval, 1, trading_type)
 
-    def get_news(self, query, lookback_days=7):
-        """Fetch financial news articles with improved error handling"""
-        if not self.newsapi:
-            print("⚠️ NewsAPI not configured")
-            return pd.DataFrame()
-            # Return empty DataFrame instead of list
-        else:
-            print("news step 1: done")
-        try:
-            self._rate_limit()
-            from_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
-            print("news step 2: done")
-            # Try general query first
-            try:
-                articles = self.newsapi.get_everything(
-                    q=query,
-                    language='en',
-                    sort_by='relevancy',
-                    from_param=from_date,
-                    page_size=50
-                )['articles']
-                print("news step 3: done")
 
-            except:
-                # Fallback to top headlines if everything fails
-                articles = self.newsapi.get_top_headlines(
-                    q=query,
-                    language='en',
-                    page_size=50
-                )['articles']
-
-            # Convert to DataFrame with proper datetime index
-            if articles:
-                news_df = pd.DataFrame(articles)
-                news_df['publishedAt'] = pd.to_datetime(news_df['publishedAt'])
-                news_df = news_df.set_index('publishedAt')
-                news_df['sentiment'] = 0.0  # Placeholder for sentiment
-                print("news step 4: done")
-                return news_df[['title', 'sentiment']]  # Return only needed columns
-            return pd.DataFrame()  # Return empty DataFrame if no articles
-
-        except Exception as e:
-            print(f"❌ News fetch error: {str(e)}")
-            return pd.DataFrame()  # Return empty DataFrame on error
 
 # example usage
 # if __name__ == "__main__":

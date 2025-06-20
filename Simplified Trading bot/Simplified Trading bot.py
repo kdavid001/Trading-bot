@@ -1,11 +1,14 @@
-from data_pipeline import build_dataset
-from model_builder_ST import build_direction_model, prepare_dataset, train_model, generate_features
-import tensorflow as tf
+import os
+import random
+from typing import Dict
+
 import numpy as np
 import pandas as pd
-import random
-import os
-from typing import Dict, Tuple
+import tensorflow as tf
+
+from data_pipeline import build_dataset
+from model_builder_ST import build_direction_model, prepare_dataset, train_model, generate_features
+from News_analysis import AssetNewsFetcher
 
 # Set random seeds for reproducibility
 SEED = 42
@@ -13,12 +16,10 @@ os.environ['PYTHONHASHSEED'] = str(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
-
-# Set mixed precision policy for faster training
+trading_type = "crypto"
 tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 
-# Add this new function to validate the combined dataset
 def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1000) -> pd.DataFrame:
     """Validate the combined dataset meets minimum requirements"""
     if not isinstance(full_df.index, pd.DatetimeIndex):
@@ -31,10 +32,16 @@ def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1
             raise ValueError(f"Symbol {symbol} only has {count} samples (min {min_samples_per_asset})")
 
     # Check required columns
-    required_cols = {'open', 'high', 'low', 'close', 'symbol'}
-    missing = required_cols - set(full_df.columns)
-    if missing:
-        raise ValueError(f"Missing required columns: {missing}")
+    if trading_type == "forex":
+        required_cols = {'open', 'high', 'low', 'close', 'symbol'}
+        missing = required_cols - set(full_df.columns)
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}")
+    elif trading_type == "crypto":
+        required_cols = {'open', 'high', 'low', 'symbol', 'volume'}
+        missing = required_cols - set(full_df.columns)
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}")
 
     return full_df.sort_index()
 
@@ -70,21 +77,10 @@ def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         full_df = full_df[~duplicates]
 
     return full_df
-
+news_fetcher = AssetNewsFetcher()
 def main():
     global assets
     try:
-        # assets = [
-        #     {'symbol': 'BTC-USD', 'news_query': 'Bitcoin'},
-        #     {'symbol': 'EURUSD=X', 'news_query': 'EUR USD'},
-        # ]
-
-        # assets = [
-        #     {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-        #     {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-        #     # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-        # ]
-        trading_type = "forex"
         if trading_type == "forex":
             assets = [
                 {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
@@ -100,6 +96,7 @@ def main():
                 # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
                 # {'symbol': 'SPY', 'news_query': 'S&P 500'}
             ]
+
 
         window_size = 60
         epochs = 150
@@ -162,6 +159,13 @@ def main():
         )
 
         print("🎉 Training complete!")
+
+        # Latest news Sentiment
+        asset_name = assets[0]['news_query']
+        print(f"Fetching news for {asset_name}")
+        news = news_fetcher.get_latest_article(asset_name)
+        sentiment_result = news_fetcher.process_sentiment([news])
+        print(sentiment_result)
 
     except Exception as e:
         print(f"🔥 Pipeline failed: {str(e)}")
