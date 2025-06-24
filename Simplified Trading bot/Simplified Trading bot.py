@@ -12,11 +12,12 @@ from News_analysis import AssetNewsFetcher
 
 # Set random seeds for reproducibility
 SEED = 42
+window_size = 60
 os.environ['PYTHONHASHSEED'] = str(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
-trading_type = "crypto"
+trading_type = "forex"
 tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 
@@ -165,11 +166,59 @@ def main():
         print(f"Fetching news for {asset_name}")
         news = news_fetcher.get_latest_article(asset_name)
         sentiment_result = news_fetcher.process_sentiment([news])
-        print(sentiment_result)
 
+        latest_market_data = raw_datasets[assets[0]['symbol']].iloc[-window_size * 2:]  # Last 2 windows
+
+        # Make prediction with sentiment
+        prediction = make_prediction(trained_model, latest_market_data, sentiment_result)
+
+        print("\n=== Prediction with Sentiment ===")
+        print(f"Base Prediction: {prediction['base_prediction']:.2%}")
+        print(f"Sentiment Score: {prediction['sentiment_score']:.2f}")
+        print(f"Adjusted Prediction: {prediction['adjusted_prediction']:.2%}")
+        print(f"Sentiment Weight: {prediction['sentiment_weight']:.0%}")
+
+        # Trading decision logic example
+        if prediction['adjusted_prediction'] > 0.6:
+            print("✅ Strong buy signal (positive sentiment)")
+        elif prediction['adjusted_prediction'] < 0.4:
+            print("🚨 Strong sell signal (negative sentiment)")
+        else:
+            print("➖ Neutral signal")
     except Exception as e:
         print(f"🔥 Pipeline failed: {str(e)}")
         raise
+
+
+def make_prediction(model, market_data: pd.DataFrame, sentiment_score: float) -> dict:
+    """
+    Make prediction using model and adjust with sentiment score
+    Args:
+        model: Trained TensorFlow model
+        market_data: Latest OHLCV data as DataFrame
+        sentiment_score: Float between -1 (negative) and 1 (positive)
+    Returns:
+        Dictionary with prediction details
+    """
+    # Generate features from market data
+    features = generate_features(market_data)
+
+    # Create input sequence
+    sequence = np.array([features.values[-window_size:]]).astype(np.float32)  # Ensure correct dtype45
+    # Get base model prediction
+    base_prediction = float(model.predict(sequence)[0][0])
+
+    # Adjust prediction with sentiment (20% weight)
+    sentiment_weight = 0.2
+    adjusted_prediction = base_prediction + (sentiment_score * sentiment_weight)
+    adjusted_prediction = np.clip(adjusted_prediction, 0, 1)  # Keep between 0-1
+
+    return {
+        'base_prediction': base_prediction,
+        'sentiment_score': sentiment_score,
+        'adjusted_prediction': adjusted_prediction,
+        'sentiment_weight': sentiment_weight
+    }
 
 
 if __name__ == "__main__":

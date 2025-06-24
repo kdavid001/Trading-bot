@@ -164,7 +164,7 @@ def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100,
     os.makedirs("models", exist_ok=True)
 
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True),
+        # EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True),
         ModelCheckpoint(
             f"models/best_model_{timestamp}.h5",
             save_best_only=True,
