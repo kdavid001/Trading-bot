@@ -326,36 +326,35 @@ class DataFetcher:
             return []
 
 
-# Enhanced example usage
-if __name__ == "__main__":
-    fetcher = DataFetcher()
-
-    print("\n=== Historical Data Test ===")
-    print("BTC/USD (5 years daily):")
-    btc_data = fetcher.get_market_data('BTC/USD', interval='daily', lookback_years=5)
-    print(f"Retrieved {len(btc_data)} daily bars")
-    if not btc_data.empty:
-        print(f"From {btc_data.index[0].date()} to {btc_data.index[-1].date()}")
-
-    print("\nEUR/USD (3 years weekly):")
-    eur_data = fetcher.get_market_data('EUR/USD', interval='weekly', lookback_years=3)
-    print(f"Retrieved {len(eur_data)} weekly bars")
-    if not eur_data.empty:
-        print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
-
-    print("\nAAPL (10 years monthly):")
-    aapl_data = fetcher.get_market_data('AAPL', interval='monthly', lookback_years=10)
-    print(f"Retrieved {len(aapl_data)} monthly bars")
-    if not aapl_data.empty:
-        print(f"From {aapl_data.index[0].date()} to {aapl_data.index[-1].date()}")
-
-    print("\n=== Intraday Data Test ===")
-    print("SPY (15min intervals):")
-    spy_data = fetcher.get_market_data('SPY', interval='15min')
-    print(f"Retrieved {len(spy_data)} intraday bars")
-
-    print("\n=== News Test ===")
-    news = fetcher.get_news('stock market', lookback_days=3)
-    print(f"Retrieved {len(news)} news articles")
-    if news:
-        print(f"First article: {news[0]['title']}")
+# if __name__ == "__main__":
+#     fetcher = DataFetcher()
+#
+#     print("\n=== Historical Data Test ===")
+#     print("BTC/USD (5 years daily):")
+#     btc_data = fetcher.get_market_data('BTC/USD', interval='daily', lookback_years=5)
+#     print(f"Retrieved {len(btc_data)} daily bars")
+#     if not btc_data.empty:
+#         print(f"From {btc_data.index[0].date()} to {btc_data.index[-1].date()}")
+#
+#     print("\nEUR/USD (3 years weekly):")
+#     eur_data = fetcher.get_market_data('EUR/USD', interval='weekly', lookback_years=3)
+#     print(f"Retrieved {len(eur_data)} weekly bars")
+#     if not eur_data.empty:
+#         print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
+#
+#     print("\nAAPL (10 years monthly):")
+#     aapl_data = fetcher.get_market_data('AAPL', interval='monthly', lookback_years=10)
+#     print(f"Retrieved {len(aapl_data)} monthly bars")
+#     if not aapl_data.empty:
+#         print(f"From {aapl_data.index[0].date()} to {aapl_data.index[-1].date()}")
+#
+#     print("\n=== Intraday Data Test ===")
+#     print("SPY (15min intervals):")
+#     spy_data = fetcher.get_market_data('SPY', interval='15min')
+#     print(f"Retrieved {len(spy_data)} intraday bars")
+#
+#     print("\n=== News Test ===")
+#     news = fetcher.get_news('stock market', lookback_days=3)
+#     print(f"Retrieved {len(news)} news articles")
+#     if news:
+#         print(f"First article: {news[0]['title']}")

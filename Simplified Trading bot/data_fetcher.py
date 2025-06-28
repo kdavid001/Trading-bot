@@ -304,7 +304,6 @@ class DataFetcher:
 
 
 
-# example usage
 # if __name__ == "__main__":
 #     fetcher = DataFetcher()
 #

@@ -84,8 +84,8 @@ def main():
     try:
         if trading_type == "forex":
             assets = [
-                {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
-                # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+                # {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+                {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
                 # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
                 # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
                 # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
@@ -164,13 +164,16 @@ def main():
         # Latest news Sentiment
         asset_name = assets[0]['news_query']
         print(f"Fetching news for {asset_name}")
+        print("0 done -> next step")
         news = news_fetcher.get_latest_article(asset_name)
+        print("1 done -> next step")
+        print(news)
         sentiment_result = news_fetcher.process_sentiment([news])
-
-        latest_market_data = raw_datasets[assets[0]['symbol']].iloc[-window_size * 2:]  # Last 2 windows
-
+        print("2 done -> next step")
+        # latest_market_data = raw_datasets[assets[0]['symbol']].iloc[-window_size * 2:]  # Last 2 windows
+        print("3 done -> next step")
         # Make prediction with sentiment
-        prediction = make_prediction(trained_model, latest_market_data, sentiment_result)
+        prediction = make_prediction(trained_model, news, sentiment_result)
 
         print("\n=== Prediction with Sentiment ===")
         print(f"Base Prediction: {prediction['base_prediction']:.2%}")

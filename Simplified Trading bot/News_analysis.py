@@ -6,8 +6,9 @@ from newsapi import NewsApiClient
 from config import CONFIG
 from news_processor import NewsProcessor
 
-
 news_processor = NewsProcessor()
+
+
 class AssetNewsFetcher:
     """Minimal news fetcher that returns only the latest article for an asset"""
 
@@ -66,8 +67,6 @@ class AssetNewsFetcher:
         return result
 
 
-
-# Example Usage
 if __name__ == "__main__":
     # Initialize with your API key (or set NEWS_API_KEY environment variable)
     fetcher = AssetNewsFetcher()
@@ -75,7 +74,8 @@ if __name__ == "__main__":
     # Get latest news for different assets
     assets = [
         # {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-        {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+        # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+        {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
         # {'symbol': 'SPY', 'news_query': 'S&P 500'}
     ]
     asset_name = assets[0]['news_query']
