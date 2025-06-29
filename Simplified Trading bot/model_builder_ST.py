@@ -1,22 +1,21 @@
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from keras.src.layers import Multiply
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (
-    Input, LSTM, Dense, Dropout,
-    BatchNormalization, Conv1D, Multiply,
-    Permute, RepeatVector, Flatten,
-    MaxPooling1D, GlobalAveragePooling1D, Reshape
-)
 from tensorflow.keras.callbacks import (
     EarlyStopping, ModelCheckpoint,
     ReduceLROnPlateau
 )
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.metrics import Precision, Recall
 from sklearn.preprocessing import MinMaxScaler
 import os
 import datetime
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv1D, LSTM, Dense, Dropout, BatchNormalization, GlobalMaxPooling1D
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.metrics import Precision, Recall
 
 # Configuration
 WINDOW_SIZE = 60
@@ -127,78 +126,89 @@ def prepare_dataset(dataset, window_size=WINDOW_SIZE):
         return (empty, empty), (empty, empty)
 
 
-# def build_direction_model(input_shape):
-#     """Build enhanced model for directional prediction"""
-#     inputs = Input(shape=input_shape)
-#     # Feature normalization
-#     x = BatchNormalization()(inputs)
-#
-#     # Temporal feature extraction
-#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
-#                kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-#     x = Conv1D(256, kernel_size=3, activation='relu', padding='causal',
-#                kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-#
-#     x = BatchNormalization()(x)
-#     x = Dropout(0.3)(x)
-#     # Hierarchical LSTM
-#     x = LSTM(256, return_sequences=True)(x)
-#     x = Dropout(0.3)(x)  # This was increased from 0.3 to 0.4
-#     x = LSTM(128, return_sequences=True)(x)
-#     x = Dropout(0.3)(x)
-#     x = LSTM(64)(x)
-#
-#     # Simplified attention mechanism
-#     attention = Dense(64, activation='tanh')(x)
-#     attention = Dense(1, activation='sigmoid')(attention)
-#     x = Multiply()([x, attention])
-#
-#     # Output - single scalar with sigmoid activation for binary classification
-#     output = Dense(1, activation='sigmoid', kernel_regularizer=tf.keras.regularizers.l2(1e-4)
-#                    )(x)
-#
-#     model = Model(inputs=inputs, outputs=output)
-#     model.compile(
-#         optimizer=Adam(learning_rate=0.0005),
-#         loss='binary_crossentropy',
-#         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
-#     )
-#     return model
 def build_direction_model(input_shape):
+    """Build enhanced model for directional prediction"""
     inputs = Input(shape=input_shape)
-
-    # Input normalization
+    # Feature normalization
     x = BatchNormalization()(inputs)
 
-    # Temporal convolution blocks
-    x = Conv1D(64, kernel_size=5, activation='relu', padding='causal')(x)
-    x = MaxPooling1D(2)(x)
-    x = Conv1D(128, kernel_size=3, activation='relu', padding='causal')(x)
+    # Temporal feature extraction
+    x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
+               kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
+    x = Conv1D(256, kernel_size=3, activation='relu', padding='causal',
+               kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
+
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
-
-    # LSTM Sequence Processing
+    # Hierarchical LSTM
+    x = LSTM(256, return_sequences=True)(x)
+    x = Dropout(0.3)(x)  # This was increased from 0.3 to 0.4
     x = LSTM(128, return_sequences=True)(x)
-    x = LSTM(64)(x)  # Last output only
+    x = Dropout(0.3)(x)
+    x = LSTM(64)(x)
 
-    # Feature refinement
-    x = Dense(64, activation='relu')(x)
-    x = Dropout(0.4)(x)
+    # Simplified attention mechanism
+    attention = Dense(64, activation='tanh')(x)
+    attention = Dense(1, activation='sigmoid')(attention)
+    x = Multiply()([x, attention])
 
-    # Output layer
-    output = Dense(1, activation='sigmoid')(x)
+    # Output - single scalar with sigmoid activation for binary classification
+    output = Dense(1, activation='sigmoid', kernel_regularizer=tf.keras.regularizers.l2(1e-4)
+                   )(x)
 
     model = Model(inputs=inputs, outputs=output)
-
-    # Use higher initial learning rate with decay
-    opt = Adam(learning_rate=0.0003)
-
     model.compile(
-        optimizer=opt,
+        optimizer=Adam(learning_rate=0.0005),
         loss='binary_crossentropy',
         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
     )
     return model
+
+
+# def build_direction_model(input_shape):
+#
+#     inputs = Input(shape=input_shape)
+#
+#     # Feature-wise normalization
+#     x = BatchNormalization(axis=-1)(inputs)
+#
+#     # Temporal convolution blocks with feature-aware kernels
+#     x = Conv1D(64, kernel_size=5, activation='relu', padding='causal',
+#                kernel_regularizer=l2(1e-4))(x)
+#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
+#                kernel_regularizer=l2(1e-4))(x)
+#     x = BatchNormalization()(x)
+#     x = Dropout(0.4)(x)
+#
+#     # Feature-reduction convolution
+#     x = Conv1D(64, kernel_size=1, activation='relu')(x)  # Reduce feature dimensions
+#
+#     # Depthwise separable convolution for efficiency
+#     x = Conv1D(128, kernel_size=3, activation='relu', padding='same',
+#                groups=8, kernel_regularizer=l2(1e-4))(x)
+#
+#     # Hierarchical LSTM processing
+#     x = LSTM(128, return_sequences=True)(x)
+#     x = LSTM(64)(x)
+#
+#     # Feature refinement
+#     x = Dense(64, activation='relu')(x)
+#     x = Dropout(0.5)(x)
+#
+#     # Output layer
+#     output = Dense(1, activation='sigmoid')(x)
+#
+#     model = Model(inputs=inputs, outputs=output)
+#
+#     # Optimizer with warmup
+#     opt = Adam(learning_rate=0.00015)
+#
+#     model.compile(
+#         optimizer=opt,
+#         loss='binary_crossentropy',
+#         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
+#     )
+#     return model
 
 def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100, batch_size=64):
     """Train directional model with callbacks"""
@@ -206,8 +216,7 @@ def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100,
     os.makedirs("models", exist_ok=True)
 
     callbacks = [
-        EarlyStopping(patience=15, restore_best_weights=True),
-        ReduceLROnPlateau(monitor='val_loss', patience=3),
+        EarlyStopping(patience=15, mode="max", min_delta=0.01, restore_best_weights=True),
         ModelCheckpoint(
             f"models/best_model_{timestamp}.h5",
             save_best_only=True,
@@ -215,9 +224,10 @@ def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100,
         ),
         ReduceLROnPlateau(
             monitor='val_loss',
-            factor=0.5,
+            factor=0.7,
             patience=5,
-            min_lr=1e-6
+            min_lr=1e-6,
+            cooldown=2,
         )
     ]
 
@@ -228,7 +238,8 @@ def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100,
         epochs=epochs,
         batch_size=batch_size,
         callbacks=callbacks,
-        verbose=1
+        verbose=1,
+        shuffle=True
     )
 
     # Save final model

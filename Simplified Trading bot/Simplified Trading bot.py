@@ -103,7 +103,7 @@ def main():
         epochs = 150
         batch_size = 128
         min_samples = 1000  # Minimum samples per asset
-        lookback_years = 5
+        lookback_years = 10
 
         # Step 1: Build dataset
         print("🛠️ Building dataset...")
@@ -122,7 +122,8 @@ def main():
         print("🧹 Combining and validating datasets...")
         full_df = combine_datasets(raw_datasets)
         full_df = validate_combined_data(full_df, min_samples)
-
+        full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+        print("✅ Saved all data to combined_data_pipeline.csv")
         # Step 3: Prepare for training
         print("⚙️ Preparing training data...")
         (X_train, y_train), (X_val, y_val) = prepare_dataset(
@@ -137,6 +138,7 @@ def main():
         if X_train.shape[0] == 0:
             raise ValueError("❌ X_train is empty — check window size, data cleaning, or dataset preparation logic.")
         input_shape = (window_size, X_train.shape[2])
+        print(input_shape, len(input_shape))
         model = build_direction_model(input_shape)
         model.summary()
 
@@ -171,10 +173,9 @@ def main():
         sentiment_result = news_fetcher.process_sentiment([news])
         print("2 done -> next step")
         # latest_market_data = raw_datasets[assets[0]['symbol']].iloc[-window_size * 2:]  # Last 2 windows
-        print("3 done -> next step")
         # Make prediction with sentiment
         prediction = make_prediction(trained_model, news, sentiment_result)
-
+        print("3 done -> next step")
         print("\n=== Prediction with Sentiment ===")
         print(f"Base Prediction: {prediction['base_prediction']:.2%}")
         print(f"Sentiment Score: {prediction['sentiment_score']:.2f}")
@@ -193,7 +194,7 @@ def main():
         raise
 
 
-def make_prediction(model, market_data: pd.DataFrame, sentiment_score: float) -> dict:
+def make_prediction(model, market_data: pd.DataFrame, sentiment_score):
     """
     Make prediction using model and adjust with sentiment score
     Args:

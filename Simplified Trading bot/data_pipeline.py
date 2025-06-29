@@ -140,57 +140,62 @@ def build_dataset(assets: List[Dict[str, str]], lookback_years: int, trading_typ
         print(f"Missing values: {df.isna().sum().sum()}")
         if 'news_sentiment' in df.columns:
             print(f"Sentiment range: {df['news_sentiment'].min():.2f} to {df['news_sentiment'].max():.2f}")
-
+    #     # full_df = pd.concat(combined)
+    #     full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+    #     print("✅ Saved all data to combined_data_pipeline.csv")
     return datasets
 
 
-def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """
-    Combines multiple asset datasets into one unified DataFrame
+# def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+#     """
+#     Combines multiple asset datasets into one unified DataFrame
+#
+#     Args:
+#         datasets: Dictionary of DataFrames from build_dataset()
+#
+#     Returns:
+#         Combined DataFrame with symbol column preserved
+#     """
+#     combined = []
+#     for symbol, df in datasets.items():
+#         df = df.copy()
+#         df['symbol'] = symbol  # Ensure symbol column exists
+#         combined.append(df)
+#
+#     full_df = pd.concat(combined)
+#
+#     # Sort by timestamp and symbol
+#     full_df = full_df.sort_values(by=['symbol', full_df.index.name or 'timestamp'])
+#     # Check for duplicates
+#     duplicates = full_df.duplicated(subset=['symbol', full_df.index.name or 'timestamp'])
+#     if duplicates.any():
+#         print(f"⚠️ Found {duplicates.sum()} duplicate timestamps - keeping first occurrence")
+#         full_df = full_df[~duplicates]
+#
+#     # full_df = pd.concat(combined)
+#     full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+#     print("✅ Saved all data to combined_data_pipeline.csv")
+#     return full_df
 
-    Args:
-        datasets: Dictionary of DataFrames from build_dataset()
 
-    Returns:
-        Combined DataFrame with symbol column preserved
-    """
-    combined = []
-    for symbol, df in datasets.items():
-        df = df.copy()
-        df['symbol'] = symbol  # Ensure symbol column exists
-        combined.append(df)
-
-    full_df = pd.concat(combined)
-
-    # Sort by timestamp and symbol
-    full_df = full_df.sort_values(by=['symbol', full_df.index.name or 'timestamp'])
-    # Check for duplicates
-    duplicates = full_df.duplicated(subset=['symbol', full_df.index.name or 'timestamp'])
-    if duplicates.any():
-        print(f"⚠️ Found {duplicates.sum()} duplicate timestamps - keeping first occurrence")
-        full_df = full_df[~duplicates]
-
-    return full_df
-
-
-def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1000) -> pd.DataFrame:
-    """Validate the combined dataset meets minimum requirements"""
-    if not isinstance(full_df.index, pd.DatetimeIndex):
-        raise ValueError("Data must have DatetimeIndex")
-
-    # Check each symbol has enough data
-    symbol_counts = full_df['symbol'].value_counts()
-    for symbol, count in symbol_counts.items():
-        if count < min_samples_per_asset:
-            raise ValueError(f"Symbol {symbol} only has {count} samples (min {min_samples_per_asset})")
-
-    # Check required columns
-    required_cols = {'open', 'high', 'low', 'close', 'symbol'}
-    missing = required_cols - set(full_df.columns)
-    if missing:
-        raise ValueError(f"Missing required columns: {missing}")
-
-    return full_df.sort_index()
+# def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1000) -> pd.DataFrame:
+#     """Validate the combined dataset meets minimum requirements"""
+#     if not isinstance(full_df.index, pd.DatetimeIndex):
+#         raise ValueError("Data must have DatetimeIndex")
+#
+#     # Check each symbol has enough data
+#     symbol_counts = full_df['symbol'].value_counts()
+#     for symbol, count in symbol_counts.items():
+#         if count < min_samples_per_asset:
+#             raise ValueError(f"Symbol {symbol} only has {count} samples (min {min_samples_per_asset})")
+#
+#     # Check required columns
+#     required_cols = {'open', 'high', 'low', 'close', 'symbol'}
+#     missing = required_cols - set(full_df.columns)
+#     if missing:
+#         raise ValueError(f"Missing required columns: {missing}")
+#
+#     return full_df.sort_index()
 
 if __name__ == "__main__":
     trading_type = 'forex'
