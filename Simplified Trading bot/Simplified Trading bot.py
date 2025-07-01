@@ -110,13 +110,13 @@ def main():
         raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
         print(f"✅ Dataset built for {len(raw_datasets)} assets")
         # In your main() function, after building the dataset:
-        print("\n=== Data Sample ===")
-        for symbol, df in raw_datasets.items():
-            print(f"\n{symbol} data:")
-            print("Columns:", df.columns.tolist())
-            print("Index type:", type(df.index))
-            print("First 5 rows:")
-            print(df.head())
+        # print("\n=== Data Sample ===")
+        # for symbol, df in raw_datasets.items():
+        #     print(f"\n{symbol} data:")
+        #     print("Columns:", df.columns.tolist())
+        #     print("Index type:", type(df.index))
+        #     print("First 5 rows:")
+        #     print(df.head())
 
         # Step 2: Combine and validate
         print("🧹 Combining and validating datasets...")

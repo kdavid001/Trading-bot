@@ -142,7 +142,7 @@ def build_direction_model(input_shape):
     x = Dropout(0.3)(x)
     # Hierarchical LSTM
     x = LSTM(256, return_sequences=True)(x)
-    x = Dropout(0.3)(x)  # This was increased from 0.3 to 0.4
+    x = Dropout(0.3)(x)
     x = LSTM(128, return_sequences=True)(x)
     x = Dropout(0.3)(x)
     x = LSTM(64)(x)
