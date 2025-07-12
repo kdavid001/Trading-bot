@@ -36,14 +36,3 @@ For trading systems to be profitable, you need:
 - Volatility Prediction:
 
 - Validation loss < 0.05 (5% error)
-
-- [x] Remove the news sentiment from the data prediction it should only  rely on the news after it has made its prediction. 
-- [ ] Try using adding this: save the model with the lowes validation loss
-```
-if valid_loss <= valid_loss_min:
-        print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
-        valid_loss_min,
-        valid_loss))
-        torch.save(model.state_dict(), f'model_{Timestamp}_{Trading_type}_{Asset_name}.pt')
-        valid_loss_min = valid_loss
-```
