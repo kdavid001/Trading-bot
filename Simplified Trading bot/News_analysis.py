@@ -63,25 +63,25 @@ class AssetNewsFetcher:
             return None
 
     def process_sentiment(self, news):
-        result = news_processor.process_news_batch(news)
+        result = news_processor.compute_signal(news)
         return result
 
 
-if __name__ == "__main__":
-    # Initialize with your API key (or set NEWS_API_KEY environment variable)
-    fetcher = AssetNewsFetcher()
-
-    # Get latest news for different assets
-    assets = [
-        # {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-        # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-        {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
-        # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-    ]
-    asset_name = assets[0]['news_query']
-    print(f"Fetching news for {asset_name}")
-    news = fetcher.get_latest_article(asset_name)
-    print(news)
-    result = fetcher.process_sentiment([news])
-
-    print(result)
+# if __name__ == "__main__":
+#     # Initialize with your API key (or set NEWS_API_KEY environment variable)
+#     fetcher = AssetNewsFetcher()
+#
+#     # Get latest news for different assets
+#     assets = [
+#         # {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+#         {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+#         # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+#         # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+#     ]
+#     asset_name = assets[0]['news_query']
+#     print(f"Fetching news for {asset_name}")
+#     news = fetcher.get_latest_article(asset_name)
+#     print(news)
+#     result = fetcher.process_sentiment([news])
+#
+#     print(result)

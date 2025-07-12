@@ -8,7 +8,12 @@ import tensorflow as tf
 
 from data_pipeline import build_dataset
 from model_builder_ST import build_direction_model, prepare_dataset, train_model, generate_features
-from News_analysis import AssetNewsFetcher
+# from News_analysis import AssetNewsFetcher
+# news_fetcher = AssetNewsFetcher()
+
+from news_scraper import News_scraper
+
+news_fetcher = News_scraper()
 
 # Set random seeds for reproducibility
 SEED = 42
@@ -17,7 +22,7 @@ os.environ['PYTHONHASHSEED'] = str(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
-trading_type = "forex"
+trading_type = "crypto"
 tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 
@@ -78,7 +83,8 @@ def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         full_df = full_df[~duplicates]
 
     return full_df
-news_fetcher = AssetNewsFetcher()
+
+
 def main():
     global assets
     try:
@@ -97,7 +103,6 @@ def main():
                 # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
                 # {'symbol': 'SPY', 'news_query': 'S&P 500'}
             ]
-
 
         window_size = 60
         epochs = 150
@@ -167,11 +172,12 @@ def main():
         asset_name = assets[0]['news_query']
         print(f"Fetching news for {asset_name}")
         print("0 done -> next step")
-        news = news_fetcher.get_latest_article(asset_name)
+        news = news_fetcher.get_latest_article(asset_name, trading_type)
         print("1 done -> next step")
         print(news)
-        sentiment_result = news_fetcher.process_sentiment([news])
-        print("2 done -> next step")
+        sentiment_result = news_fetcher.process_sentiment(news)
+        print(sentiment_result)
+        print("2 done -> result printed, step")
         # latest_market_data = raw_datasets[assets[0]['symbol']].iloc[-window_size * 2:]  # Last 2 windows
         # Make prediction with sentiment
         prediction = make_prediction(trained_model, news, sentiment_result)
