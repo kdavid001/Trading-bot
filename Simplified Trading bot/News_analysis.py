@@ -62,8 +62,8 @@ class AssetNewsFetcher:
             print(f"Error fetching news: {e}")
             return None
 
-    def process_sentiment(self, news):
-        result = news_processor.compute_signal(news)
+    def process_sentiment(self, news, trading_type):
+        result = news_processor.compute_signal(news, trading_type)
         return result
 
 
