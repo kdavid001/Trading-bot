@@ -18,7 +18,7 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras.metrics import Precision, Recall
 
 # Configuration
-WINDOW_SIZE = 60 #Sequence length
+WINDOW_SIZE = 60  # Sequence length
 LOOKAHEAD_PERIOD = 4  # Predict direction 4 periods ahead
 # THRESHOLD = 0.0015  # Minimum price movement threshold
 THRESHOLD = 0.003  # Increased from 0.0015
@@ -31,6 +31,7 @@ def create_sequences(data, targets, window_size=WINDOW_SIZE):
         X.append(data[i - window_size:i])
         y.append(targets[i - 1])  # Using pre-created targets
     return np.array(X), np.array(y)
+
 
 # def create_sequences(data, feature_cols, targets, seq_len=60, date_col='Date', dropna=True):
 #     """
@@ -46,7 +47,7 @@ def create_sequences(data, targets, window_size=WINDOW_SIZE):
 #
 #     Returns:
 #         np.ndarray: Feature sequences (samples, seq_len, features)
-#         np.ndarray: Target sequences (samples,)
+#         np.ndarray: Target sequences (samples),
 #         np.ndarray: Corresponding last date of each sequence (samples,)
 #     """
 #     # Ensure sorted by date
@@ -67,7 +68,7 @@ def create_sequences(data, targets, window_size=WINDOW_SIZE):
 #
 #     return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32), np.array(dates)
 
-def generate_features(data):
+def generate_features(data, trading_type):
     """Safe feature engineering with fallbacks for all features"""
     data = data.copy()
 
@@ -78,18 +79,20 @@ def generate_features(data):
         raise ValueError(f"Missing required columns: {missing_cols}")
 
     # 2. Calculate basic features with shift(1) to prevent lookahead
+    # if you have other trading techniques you'd like to add do it here
     data['returns'] = data['close'].pct_change().shift(1)  # calculates the returns of 1 row compared to the other (
     # Close)
     data['volatility'] = (data['high'] - data['low']).shift(1)
     data['momentum'] = data['close'].pct_change(5).shift(1)
 
     # 3. Volume features (with fallback)
-    if 'volume' in data.columns:
-        vol_mean = data['volume'].rolling(20, min_periods=1).mean().shift(1)
-        vol_std = data['volume'].rolling(20, min_periods=1).std().shift(1)
-        data['volume_z'] = (data['volume'] - vol_mean) / (vol_std + 1e-8)
-    else:
-        data['volume_z'] = 0.0
+    if trading_type == 'crypto':
+        if 'volume' in data.columns:
+            vol_mean = data['volume'].rolling(20, min_periods=1).mean().shift(1)
+            vol_std = data['volume'].rolling(20, min_periods=1).std().shift(1)
+            data['volume_z'] = (data['volume'] - vol_mean) / (vol_std + 1e-8)
+        else:
+            data['volume_z'] = 0.0
 
     # 4. Volatility regime (with fallback)
     if 'volatility' in data.columns:
@@ -102,14 +105,15 @@ def generate_features(data):
     return data.dropna(subset=essential)
 
 
-def prepare_dataset(dataset, window_size=WINDOW_SIZE):
+def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
     """More robust dataset preparation"""
     try:
         # Feature engineering
-        data = generate_features(dataset)
+        data = generate_features(dataset, trading_type)
 
         # Create target
-        data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD)
+        # data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD) # for multiple symbols
+        data['future_close'] = data['close'].shift(-LOOKAHEAD_PERIOD)
         data['direction'] = np.where(
             data['future_close'] > data['close'] * (1 + THRESHOLD), 1, 0
         )
@@ -210,7 +214,6 @@ def prepare_dataset(dataset, window_size=WINDOW_SIZE):
 
 
 def build_direction_model(input_shape):
-
     inputs = Input(shape=input_shape)
 
     # Feature-wise normalization
@@ -253,6 +256,7 @@ def build_direction_model(input_shape):
         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
     )
     return model
+
 
 def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100, batch_size=64):
     """Train directional model with callbacks"""

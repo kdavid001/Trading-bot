@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from data_pipeline import build_dataset
+from data_pipeline import build_dataset, combine_datasets, validate_combined_data
 from model_builder_ST import build_direction_model, prepare_dataset, train_model, generate_features
 # from News_analysis import AssetNewsFetcher
 # news_fetcher = AssetNewsFetcher()
@@ -26,63 +26,35 @@ trading_type = "forex"
 tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 
-def validate_combined_data(full_df: pd.DataFrame, min_samples_per_asset: int = 1000) -> pd.DataFrame:
-    """Validate the combined dataset meets minimum requirements"""
-    if not isinstance(full_df.index, pd.DatetimeIndex):
-        raise ValueError("Data must have DatetimeIndex")
-
-    # Check each symbol has enough data
-    symbol_counts = full_df['symbol'].value_counts()
-    for symbol, count in symbol_counts.items():
-        if count < min_samples_per_asset:
-            raise ValueError(f"Symbol {symbol} only has {count} samples (min {min_samples_per_asset})")
-
-    # Check required columns
-    if trading_type == "forex":
-        required_cols = {'open', 'high', 'low', 'close', 'symbol'}
-        missing = required_cols - set(full_df.columns)
-        if missing:
-            raise ValueError(f"Missing required columns: {missing}")
-    elif trading_type == "crypto":
-        required_cols = {'open', 'high', 'low', 'symbol', 'volume'}
-        missing = required_cols - set(full_df.columns)
-        if missing:
-            raise ValueError(f"Missing required columns: {missing}")
-
-    return full_df.sort_index()
-
-
-def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+def make_prediction(model, market_data: pd.DataFrame, sentiment_score):
     """
-    Combines multiple asset datasets into one unified DataFrame
-    with proper datetime handling
+    Make prediction using model and adjust with sentiment score
+    Args:
+        model: Trained TensorFlow model
+        market_data: Latest OHLCV data as DataFrame
+        sentiment_score: Float between -1 (negative) and 1 (positive)
+    Returns:
+        Dictionary with prediction details
     """
-    combined = []
-    for symbol, df in datasets.items():
-        df = df.copy()
+    # Generate features from market data
+    features = generate_features(market_data, trading_type)
 
-        # Ensure we have a datetime index
-        if not isinstance(df.index, pd.DatetimeIndex):
-            if 'Date' in df.columns:
-                df = df.set_index('Date')
-            else:
-                df.index = pd.to_datetime(df.index)
+    # Create input sequence
+    sequence = np.array([features.values[-window_size:]]).astype(np.float32)  # Ensure correct dtype45
+    # Get base model prediction
+    base_prediction = float(model.predict(sequence)[0][0])
 
-        df['symbol'] = symbol
-        combined.append(df)
+    # Adjust prediction with sentiment (20% weight)
+    sentiment_weight = 0.2
+    adjusted_prediction = base_prediction + (sentiment_score * sentiment_weight)
+    adjusted_prediction = np.clip(adjusted_prediction, 0, 1)  # Keep between 0-1
 
-    full_df = pd.concat(combined)
-
-    # Sort by datetime and symbol
-    full_df = full_df.sort_values(by=['symbol', full_df.index.name or 'datetime'])
-
-    # Check for duplicates
-    duplicates = full_df.reset_index().duplicated(subset=['symbol', full_df.index.name or 'index'])
-    if duplicates.any():
-        print(f"⚠️ Found {duplicates.sum()} duplicate timestamps - keeping first occurrence")
-        full_df = full_df[~duplicates]
-
-    return full_df
+    return {
+        'base_prediction': base_prediction,
+        'sentiment_score': sentiment_score,
+        'adjusted_prediction': adjusted_prediction,
+        'sentiment_weight': sentiment_weight
+    }
 
 
 def main():
@@ -115,25 +87,21 @@ def main():
         print("🛠️ Building dataset...")
         raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
         print(f"✅ Dataset built for {len(raw_datasets)} assets")
-        # In your main() function, after building the dataset:
-        # print("\n=== Data Sample ===")
-        # for symbol, df in raw_datasets.items():
-        #     print(f"\n{symbol} data:")
-        #     print("Columns:", df.columns.tolist())
-        #     print("Index type:", type(df.index))
-        #     print("First 5 rows:")
-        #     print(df.head())
 
         # Step 2: Combine and validate
         print("🧹 Combining and validating datasets...")
         full_df = combine_datasets(raw_datasets)
-        full_df = validate_combined_data(full_df, min_samples)
+        full_df = validate_combined_data(full_df, trading_type, min_samples)
         full_df.to_csv("data/combined_data_pipeline.csv", index=True)
         print("✅ Saved all data to combined_data_pipeline.csv")
         # Step 3: Prepare for training
         print("⚙️ Preparing training data...")
+        # print(full_df.describe())
+        # print(full_df.columns)
+        # print(full_df.index.dtype)
+        # return full_df.head(100)
         (X_train, y_train), (X_val, y_val) = prepare_dataset(
-            full_df,
+            full_df, trading_type=trading_type,
             window_size=window_size
         )
 
@@ -153,7 +121,7 @@ def main():
         if len(X_train) == 0 or len(y_train) == 0:
             print("❌ Empty training data - debugging info:")
             print("- Original data shape:", full_df.shape)
-            print("- Features after engineering:", generate_features(full_df).shape)
+            print("- Features after engineering:", generate_features(full_df, trading_type).shape)
             print("- Unique symbols:", full_df['symbol'].unique())
             print("- Date range:", full_df.index.min(), "to", full_df.index.max())
             raise ValueError("Empty training data - see debug output above")
@@ -201,37 +169,6 @@ def main():
     except Exception as e:
         print(f"🔥 Pipeline failed: {str(e)}")
         raise
-
-
-def make_prediction(model, market_data: pd.DataFrame, sentiment_score):
-    """
-    Make prediction using model and adjust with sentiment score
-    Args:
-        model: Trained TensorFlow model
-        market_data: Latest OHLCV data as DataFrame
-        sentiment_score: Float between -1 (negative) and 1 (positive)
-    Returns:
-        Dictionary with prediction details
-    """
-    # Generate features from market data
-    features = generate_features(market_data)
-
-    # Create input sequence
-    sequence = np.array([features.values[-window_size:]]).astype(np.float32)  # Ensure correct dtype45
-    # Get base model prediction
-    base_prediction = float(model.predict(sequence)[0][0])
-
-    # Adjust prediction with sentiment (20% weight)
-    sentiment_weight = 0.2
-    adjusted_prediction = base_prediction + (sentiment_score * sentiment_weight)
-    adjusted_prediction = np.clip(adjusted_prediction, 0, 1)  # Keep between 0-1
-
-    return {
-        'base_prediction': base_prediction,
-        'sentiment_score': sentiment_score,
-        'adjusted_prediction': adjusted_prediction,
-        'sentiment_weight': sentiment_weight
-    }
 
 
 if __name__ == "__main__":
