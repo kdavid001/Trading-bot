@@ -25,11 +25,11 @@ THRESHOLD = 0.003  # Increased from 0.0015
 
 
 def create_sequences(data, targets, window_size=WINDOW_SIZE):
-    """Create time-series sequences for LSTM"""
+    """Create time-series sequences for LSTM forecasting"""
     X, y = [], []
     for i in range(window_size, len(data)):
-        X.append(data[i - window_size:i])
-        y.append(targets[i - 1])  # Using pre-created targets
+        X.append(data[i - window_size:i])  # Input window: [t-w, t-1]
+        y.append(targets[i])               # Target: value at t (next step)
     return np.array(X), np.array(y)
 
 
@@ -119,7 +119,7 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
         )
 
         # Temporal split
-        split_idx = int(len(data) * 0.8)
+        split_idx = int(len(data) * 0.9)  # originally 0.8
         train_data = data.iloc[:split_idx]
         val_data = data.iloc[split_idx:]
 
@@ -128,23 +128,37 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
                              'volatility', 'momentum', 'volume_z', 'vol_regime']
         features = [f for f in possible_features if f in data.columns]
 
+        # scaling for forex done to focus on multiple symbol just incase
         # Scale each symbol separately
         scalers = {}
         train_scaled = []
+        if trading_type == 'crypto':
+            for symbol, group in train_data.groupby('symbol'):
+                scaler = MinMaxScaler()
+                scaled = group.copy()
+                scaled[features] = scaler.fit_transform(group[features])
 
-        for symbol, group in train_data.groupby('symbol'):
-            scaler = MinMaxScaler()
-            scaled = group.copy()
-            scaled[features] = scaler.fit_transform(group[features])
+                for col in ['direction', 'Date', 'symbol']:
+                    if col in group.columns:
+                        scaled[col] = group[col].values
+                scalers[symbol] = scaler
+                train_scaled.append(scaled)
 
-            for col in ['direction', 'Date', 'symbol']:
-                if col in group.columns:
-                    scaled[col] = group[col].values
-            scalers[symbol] = scaler
-            train_scaled.append(scaled)
 
+        elif trading_type == 'forex':
+            for symbol, group in train_data.groupby('symbol'):
+                scaler = MinMaxScaler()
+                scaled = group.copy()
+                scaled[features] = scaler.fit_transform(group[features])
+                for col in ['direction', 'Date', 'symbol']:
+                    if col in group.columns:
+                        scaled[col] = group[col].values
+                scalers[symbol] = scaler
+                train_scaled.append(scaled)
         train_scaled = pd.concat(train_scaled)
-
+        train_scaled["Date"] = train_scaled.index
+        train_scaled.to_csv("data/scaled_data.csv", index=True)
+        print("✅ Saved  scaled date to combined_data_pipeline.csv")
         # Scale validation data
         val_scaled = []
         for symbol, group in val_data.groupby('symbol'):

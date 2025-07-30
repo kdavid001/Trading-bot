@@ -104,7 +104,7 @@ def main():
             full_df, trading_type=trading_type,
             window_size=window_size
         )
-
+        return True
         # Step 4: Build model
         print("🏗️ Building model...")
         print("X_train shape:", X_train.shape)
