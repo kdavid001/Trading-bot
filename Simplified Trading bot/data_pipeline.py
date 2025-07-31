@@ -30,14 +30,18 @@ def build_dataset(assets: List[Dict[str, str]], lookback_years: int, trading_typ
         try:
             # 1. Fetch and validate market data
             market_data = fetcher.get_market_data(symbol, lookback_years=lookback_years, trading_type=trading_type)
-            processed_data = engineer.add_technical_features(market_data)
             if market_data.empty:
                 print(f"❌ Empty market data for {symbol} - skipping")
                 continue
 
-            # if not {'open', 'high', 'low', 'close', 'volume'}.issubset(market_data.columns):
-            #     print(f"❌ Missing OHLCv columns for {symbol}")
-            #     continue
+            if trading_type=="crypto":
+                if not {'open', 'high', 'low', 'close', 'volume'}.issubset(market_data.columns):
+                    print(f"❌ Missing OHLCv columns for {symbol}")
+                    continue
+            elif trading_type=="forex":
+                if not {'open', 'high', 'low', 'close'}.issubset(market_data.columns):
+                    print(f"❌ Missing OHLCv columns for {symbol}")
+                    continue
 
             # Check for datetime index
             if not isinstance(market_data.index, pd.DatetimeIndex):
@@ -80,9 +84,6 @@ def build_dataset(assets: List[Dict[str, str]], lookback_years: int, trading_typ
         print(f"Missing values: {df.isna().sum().sum()}")
         if 'news_sentiment' in df.columns:
             print(f"Sentiment range: {df['news_sentiment'].min():.2f} to {df['news_sentiment'].max():.2f}")
-        # full_df = pd.concat(combined)
-        # full_df.to_csv("data/combined_data_pipeline.csv", index=True)
-        # print("✅ Saved all data to combined_data_pipeline.csv")
     return datasets
 
 
@@ -118,7 +119,7 @@ def combine_datasets(datasets: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     return full_df
 
 
-def validate_combined_data(full_df: pd.DataFrame, trading_type, min_samples_per_asset: int = 1000) -> pd.DataFrame:
+def validate_combined_data(full_df: pd.DataFrame, trading_type,min_samples_per_asset: int = 1000) -> pd.DataFrame:
     """Validate the combined dataset meets minimum requirements"""
     if not isinstance(full_df.index, pd.DatetimeIndex):
         raise ValueError("Data must have DatetimeIndex")

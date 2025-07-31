@@ -1,9 +1,5 @@
-# news_processor.py
-import nltk
 import numpy as np
 from transformers import pipeline
-
-nltk.download('punkt')
 
 
 class NewsProcessor:

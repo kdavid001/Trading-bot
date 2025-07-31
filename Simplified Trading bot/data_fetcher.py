@@ -278,6 +278,7 @@ class DataFetcher:
             # Fallback to Alpha Vantage for forex
             elif '/' in symbol and self.av_fx:
                 base, quote = symbol.split('/')
+
                 # Convert interval to AlphaVantage format
                 av_interval_map = {
                     '15min': '15min',
@@ -304,30 +305,30 @@ class DataFetcher:
 
 
 
-# if __name__ == "__main__":
-#     fetcher = DataFetcher()
-#
-#     print("\n=== Historical Data Test ===")
-#     print("BTC/USD (5 years daily):")
-#     btc_data = fetcher.get_market_data('BTC/USD', interval='daily', lookback_years=5)
-#     print(f"Retrieved {len(btc_data)} daily bars")
-#     if not btc_data.empty:
-#         print(f"From {btc_data.index[0].date()} to {btc_data.index[-1].date()}")
-#
-#     print("\nEUR/USD (3 years weekly):")
-#     eur_data = fetcher.get_market_data('EUR/USD', interval='weekly', lookback_years=3)
-#     print(f"Retrieved {len(eur_data)} weekly bars")
-#     if not eur_data.empty:
-#         print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
-#
-#     print("\n=== Intraday Data Test ===")
-#     print("SPY (15min intervals):")
-#     spy_data = fetcher.get_market_data('SPY', interval='15min')
-#     print(f"Retrieved {len(spy_data)} intraday bars")
-#
-#     print("\n=== News Test ===")
-#     news = fetcher.get_news('stock market', lookback_days=3)
-#     print(f"Retrieved {len(news)} news articles")
-#     if not news.empty:
-#         print(f"First article: {news.iloc[3]['title']}")
-#
+if __name__ == "__main__":
+    fetcher = DataFetcher()
+
+    print("\n=== Historical Data Test ===")
+    print("BTC/USD (5 years daily):")
+    btc_data = fetcher.get_market_data('BTC/USD', interval='daily', lookback_years=5)
+    print(f"Retrieved {len(btc_data)} daily bars")
+    if not btc_data.empty:
+        print(f"From {btc_data.index[0].date()} to {btc_data.index[-1].date()}")
+
+    print("\nEUR/USD (3 years weekly):")
+    eur_data = fetcher.get_market_data('EUR/USD', interval='weekly', lookback_years=3)
+    print(f"Retrieved {len(eur_data)} weekly bars")
+    if not eur_data.empty:
+        print(f"From {eur_data.index[0].date()} to {eur_data.index[-1].date()}")
+
+    print("\n=== Intraday Data Test ===")
+    print("SPY (15min intervals):")
+    spy_data = fetcher.get_market_data('SPY', interval='15min')
+    print(f"Retrieved {len(spy_data)} intraday bars")
+
+    print("\n=== News Test ===")
+    news = fetcher.get_news('stock market', lookback_days=3)
+    print(f"Retrieved {len(news)} news articles")
+    if not news.empty:
+        print(f"First article: {news.iloc[3]['title']}")
+

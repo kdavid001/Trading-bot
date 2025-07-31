@@ -1,6 +1,8 @@
+import keras
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from keras import Sequential
 from keras.src.layers import Multiply
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import (
@@ -15,7 +17,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Conv1D, LSTM, Dense, Dropout, BatchNormalization, GlobalMaxPooling1D
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import l2
-from tensorflow.keras.metrics import Precision, Recall
+from tensorflow.keras.metrics import Precision, Recall, AUC
 
 # Configuration
 WINDOW_SIZE = 60  # Sequence length
@@ -29,7 +31,7 @@ def create_sequences(data, targets, window_size=WINDOW_SIZE):
     X, y = [], []
     for i in range(window_size, len(data)):
         X.append(data[i - window_size:i])  # Input window: [t-w, t-1]
-        y.append(targets[i])               # Target: value at t (next step)
+        y.append(targets[i])  # Target: value at t (next step)
     return np.array(X), np.array(y)
 
 
@@ -71,7 +73,6 @@ def create_sequences(data, targets, window_size=WINDOW_SIZE):
 def generate_features(data, trading_type):
     """Safe feature engineering with fallbacks for all features"""
     data = data.copy()
-
     # 1. Ensure we have required columns
     required_cols = ['open', 'high', 'low', 'close']
     missing_cols = set(required_cols) - set(data.columns)
@@ -98,10 +99,12 @@ def generate_features(data, trading_type):
     if 'volatility' in data.columns:
         data['vol_regime'] = (data['volatility'] > data['volatility'].rolling(50).mean().shift(1)).astype(int)
     else:
-        data['vol_regime'] = 0
+        # data['vol_regime'] = 0
+        pass
 
     # 5. Only drop rows where essential features are missing
-    essential = ['returns', 'volatility', 'momentum']
+    # essential = ['returns', 'volatility', 'momentum']
+    essential = ['returns']
     return data.dropna(subset=essential)
 
 
@@ -110,7 +113,6 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
     try:
         # Feature engineering
         data = generate_features(dataset, trading_type)
-
         # Create target
         # data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD) # for multiple symbols
         data['future_close'] = data['close'].shift(-LOOKAHEAD_PERIOD)
@@ -118,18 +120,32 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
             data['future_close'] > data['close'] * (1 + THRESHOLD), 1, 0
         )
 
-        # Temporal split
-        split_idx = int(len(data) * 0.9)  # originally 0.8
+        # split data
+        split_idx = int(len(data) * 0.95)
         train_data = data.iloc[:split_idx]
         val_data = data.iloc[split_idx:]
 
         # Define features - only use existing ones
-        possible_features = ['open', 'high', 'low', 'close', 'returns',
-                             'volatility', 'momentum', 'volume_z', 'vol_regime']
+        possible_features = []
+        if trading_type == "forex":
+            possible_features = [
+                'open', 'high', 'low', 'close', 'returns',
+                # 'momentum',
+                # 'rsi', 'macd_line', 'macd_signal', 'macd_diff', 'stoch',
+                # 'atr', 'atr_pct', 'bb_width',
+                # 'hour', 'day_of_week', 'month'
+                # 'kst', 'squeeze'
+            ]
+        elif trading_type == "crypto":
+            possible_features = [
+                'open', 'high', 'low', 'close', 'returns', 'volatility', 'momentum',
+                'volume_z', 'rsi', 'macd_line', 'macd_signal', 'macd_diff', 'stoch',
+                'atr', 'atr_pct', 'bb_width', 'hour', 'day_of_week', 'month',
+                'kst', 'squeeze', 'vol_regime'
+            ]
         features = [f for f in possible_features if f in data.columns]
 
-        # scaling for forex done to focus on multiple symbol just incase
-        # Scale each symbol separately
+        # scaling for forex done to focus on multiple symbols just incase.
         scalers = {}
         train_scaled = []
         if trading_type == 'crypto':
@@ -137,10 +153,6 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
                 scaler = MinMaxScaler()
                 scaled = group.copy()
                 scaled[features] = scaler.fit_transform(group[features])
-
-                for col in ['direction', 'Date', 'symbol']:
-                    if col in group.columns:
-                        scaled[col] = group[col].values
                 scalers[symbol] = scaler
                 train_scaled.append(scaled)
 
@@ -149,35 +161,35 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
             for symbol, group in train_data.groupby('symbol'):
                 scaler = MinMaxScaler()
                 scaled = group.copy()
-                scaled[features] = scaler.fit_transform(group[features])
-                for col in ['direction', 'Date', 'symbol']:
-                    if col in group.columns:
-                        scaled[col] = group[col].values
                 scalers[symbol] = scaler
+                scaled[features] = scaler.fit_transform(group[features])
                 train_scaled.append(scaled)
+
         train_scaled = pd.concat(train_scaled)
         train_scaled["Date"] = train_scaled.index
-        train_scaled.to_csv("data/scaled_data.csv", index=True)
-        print("✅ Saved  scaled date to combined_data_pipeline.csv")
+
+        # train_scaled.to_csv("data/scaled_data.csv", index=True)
+        # print("✅ Saved  scaled date to combined_data_pipeline.csv")
+
         # Scale validation data
         val_scaled = []
         for symbol, group in val_data.groupby('symbol'):
             if symbol in scalers:
                 scaled = group.copy()
-                for col in ['direction', 'Date', 'symbol']:
-                    if col in group.columns:
-                        scaled[col] = group[col].values
                 scaled[features] = scalers[symbol].transform(group[features])
                 val_scaled.append(scaled)
-
         val_scaled = pd.concat(val_scaled)
 
+        # print(f"These are the Column for the trained data: {train_scaled[features].columns}")
+        # print(f"These are the Column for the Val_data: {val_scaled[features].columns}")
+
+        train_scaled[features].to_csv("data/train_scaled.csv", index=True)
+        print("saved x_val")
+        train_scaled["direction"].to_csv("data/train_scaled_direction.csv", index=True)
+        print("saved directions")
         # Create sequences
         X_train, y_train = create_sequences(train_scaled[features].values, train_scaled['direction'].values)
         X_val, y_val = create_sequences(val_scaled[features].values, val_scaled['direction'].values)
-
-        # X_train, y_train, train_dates = create_sequences(train_scaled, features, 'direction')
-        # X_val, y_val = create_sequences(val_scaled, features, 'direction')
 
         return (X_train, y_train), (X_val, y_val)
 
@@ -250,7 +262,7 @@ def build_direction_model(input_shape):
 
     # Hierarchical LSTM processing
     x = LSTM(128, return_sequences=True)(x)
-    x = LSTM(64)(x)
+    x = LSTM(64, return_sequences=False)(x)
 
     # Feature refinement
     x = Dense(64, activation='relu')(x)
@@ -267,12 +279,69 @@ def build_direction_model(input_shape):
     model.compile(
         optimizer=opt,
         loss='binary_crossentropy',
-        metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
+        metrics=['accuracy', Precision(name='prec'), Recall(name='rec'), AUC(name='auc')]
     )
+
     return model
 
 
-def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100, batch_size=64):
+# def build_direction_model(input_shape):
+#     inputs = Input(shape=input_shape)
+#
+#     # Feature-wise normalization
+#     x = BatchNormalization(axis=-1)(inputs)
+#
+#     # Temporal convolution blocks with feature-aware kernels
+#     # x = Conv1D(64, kernel_size=5, activation='relu', padding='causal',
+#     #            kernel_regularizer=l2(1e-4))(x)
+#     # x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
+#     #            kernel_regularizer=l2(1e-4))(x)
+#     # x = BatchNormalization()(x)
+#     # x = Dropout(0.4)(x)
+#     #
+#     # # Feature-reduction convolution
+#     # x = Conv1D(64, kernel_size=1, activation='relu')(x)  # Reduce feature dimensions
+#     #
+#     # # Depthwise separable convolution for efficiency
+#     # x = Conv1D(128, kernel_size=3, activation='relu', padding='same',
+#     #            groups=8, kernel_regularizer=l2(1e-4))(x)
+#
+#     # Hierarchical LSTM processing
+#     x = LSTM(64, return_sequences=True)(x)
+#     x = LSTM(64, return_sequences=False)(x)
+#
+#     # Feature refinement
+#     x = Dense(64, activation='relu')(x)
+#     x = Dropout(0.5)(x)
+#
+#     # Output layer
+#     output = Dense(1, activation='sigmoid')(x)
+#
+#     model = Model(inputs=inputs, outputs=output)
+#
+#     # Optimizer with warmup
+#     opt = Adam(learning_rate=0.00015)
+#
+#     model.compile(
+#         optimizer=opt,
+#         loss='binary_crossentropy',
+#         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
+#     )
+#     return model
+
+
+# def build_direction_model(input_shape):
+#     model = keras.Sequential()
+#     model.add(LSTM(units=64, return_sequences=True, input_shape=input_shape))
+#     model.add(LSTM(units=64, return_sequences= False))
+#     model.add(Dense(units=128, activation='relu'))
+#     model.add(Dropout(0.2))
+#     model.add(Dense(units=1))
+#     model.compile(loss='mae', optimizer='adam', metrics=['accuracy', Precision(name='prec'), Recall(name='rec')])
+#     return model
+
+
+def train_model(model, X_train, y_train, X_val, y_val, trading_type,class_weight, asset_name, epochs=100, batch_size=64):
     """Train directional model with callbacks"""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     os.makedirs("models", exist_ok=True)
@@ -305,6 +374,6 @@ def train_model(model, X_train, y_train, X_val, y_val, trading_type, epochs=100,
     )
 
     # Save final model
-    model.save(f"models/direction_model_{trading_type}_{timestamp}.keras")
-    print(f"\n💾 Model saved to: models/direction_model_{trading_type}_{timestamp}.keras")
+    model.save(f"models/direction_model_{trading_type}_{timestamp}_{asset_name}.keras")
+    print(f"\n💾 Model saved to: models/direction_model_{trading_type}_{timestamp}_{asset_name}.keras")
     return model, history

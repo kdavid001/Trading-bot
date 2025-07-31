@@ -73,35 +73,22 @@ class News_scraper:
         elif trading_type == 'forex':
             driver.get(f"https://www.forexfactory.com/calendar")
             """
-            Actual > Forecast
-            → Often
-            bullish
-            for the currency
-                Actual < Forecast
-            → Often
-            bearish
-            for the currency
+            Actual > Forecast → Often bullish
+                            
+            Actual < Forecast → Often bearish
+            
+            If forecast > previous → the market expects improvement → possible bullish pressure.
+            If forecast < previous → market expects decline → bearish bias.
+            
+            bullish - increase
+            bearish - decrease
             """
-            # If
-            # forecast > previous → the
-            # market
-            # expects
-            # improvement → possible
-            # bullish
-            # pressure.
-            # If
-            # forecast < previous → market
-            # expects
-            # decline → bearish
-            # bias.
-            # bullish - increase
-            # bearish - decrease
-            # print(asset_symbol)
-            last_date = ""
 
+            # print(asset_symbol)
+
+            last_date = ""
             news_items = driver.find_elements(By.CSS_SELECTOR,"tr.calendar__row.calendar__row--single-event, tr."
                                                               "calendar__row.calendar__row--alt")
-
             for item in news_items:
                 try:
                     # Try to extract the date from the row
@@ -152,6 +139,7 @@ class News_scraper:
                     news.append(article)
                 except Exception as e:
                     error_message = f"Error parsing article: {e}"
+
             # print(error_message)
             # filtered_news
             # print(asset_symbol)

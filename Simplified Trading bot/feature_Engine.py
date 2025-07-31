@@ -41,7 +41,7 @@ class FeatureEngineer:
                 df['volume_z'] = FeatureEngineer._zscore(df['volume'], window=20).shift(1)
             else:
                 print("no volumn exist")
-                # return "there is something wrong with the volume column"
+
             # 3. Momentum Indicators (with MACD fix)
             df['momentum'] = df['close'].pct_change(5).shift(1)
             df['rsi'] = ta.momentum.rsi(df['close'], 14).shift(1)
@@ -157,26 +157,26 @@ class FeatureEngineer:
 
         return df.dropna(subset=['target'])
 
-    @staticmethod
-    def get_feature_categories() -> Dict[str, List[str]]:
-        """Returns organized feature categories"""
-        return {
-            'price': ['open', 'high', 'low', 'close', 'returns', 'log_returns'],
-            'volume': ['volume', 'volume_pct', 'volume_ma_ratio', 'obv', 'volume_z'],
-            'momentum': ['momentum', 'rsi', 'macd', 'stoch', 'kst'],
-            'volatility': ['volatility', 'atr', 'atr_pct', 'bb_width', 'squeeze'],
-            'time': ['hour', 'day_of_week', 'month']
-        }
+    # @staticmethod
+    # def get_feature_categories() -> Dict[str, List[str]]:
+    #     """Returns organized feature categories"""
+    #     return {
+    #         'price': ['open', 'high', 'low', 'close', 'returns', 'log_returns'],
+    #         'volume': ['volume', 'volume_pct', 'volume_ma_ratio', 'obv', 'volume_z'],
+    #         'momentum': ['momentum', 'rsi', 'macd', 'stoch', 'kst'],
+    #         'volatility': ['volatility', 'atr', 'atr_pct', 'bb_width', 'squeeze'],
+    #         'time': ['hour', 'day_of_week', 'month']
+    #     }
 
-    @staticmethod
-    def get_feature_importance() -> Dict[str, float]:
-        """Estimated predictive value of features"""
-        return {
-            'rsi': 0.85,
-            'macd_diff': 0.78,
-            'atr_pct': 0.72,
-            'volume_z': 0.65,
-            'bb_width': 0.63,
-            'kst': 0.60,
-            'squeeze': 0.58
-        }
+    # @staticmethod
+    # def get_feature_importance() -> Dict[str, float]:
+    #     """Estimated predictive value of features"""
+    #     return {
+    #         'rsi': 0.85,
+    #         'macd_diff': 0.78,
+    #         'atr_pct': 0.72,
+    #         'volume_z': 0.65,
+    #         'bb_width': 0.63,
+    #         'kst': 0.60,
+    #         'squeeze': 0.58
+    #     }

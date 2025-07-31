@@ -22,8 +22,139 @@ os.environ['PYTHONHASHSEED'] = str(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
-trading_type = "forex"
 tf.keras.mixed_precision.set_global_policy('mixed_float16')
+
+# User data
+trading_type = "forex"
+if trading_type == "forex":
+    # TODO: move to user data section
+    assets = [
+        # {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+        {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+        # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
+        # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
+        # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
+        # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
+    ]
+elif trading_type == "crypto":
+    # TODO: move to user data section
+    assets = [
+        {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
+        # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
+        # {'symbol': 'SPY', 'news_query': 'S&P 500'}
+    ]
+
+
+def main():
+    try:
+        # TODO: change this to collect input from user later on then store the input in a list<dict>
+
+        window_size = 60
+        epochs = 150
+        batch_size = 128
+        min_samples = 1000  # Minimum samples per asset
+        lookback_years = 10
+
+        # Step 1: Build dataset
+        print("🛠️ Building dataset...")
+        raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
+        print(f"✅ Dataset built for {len(raw_datasets)} assets")
+
+        # Step 2: Combine and validate
+        print("🧹 Combining and validating datasets...")
+        full_df = combine_datasets(raw_datasets)
+        full_df = validate_combined_data(full_df, trading_type, min_samples)
+        full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+        print("✅ Saved all data to combined_data_pipeline.csv")
+        # Step 3: Prepare for training
+        print("⚙️ Preparing training data...")
+        # print(full_df.describe())
+        # print(full_df.columns)
+        # print(full_df.index.dtype)
+        # return full_df.head(100)
+        (X_train, y_train), (X_val, y_val) = prepare_dataset(
+            full_df, trading_type=trading_type,
+            window_size=window_size
+        )
+        # Step 4: Build model
+        print("🏗️ Building model...")
+        print("X_train shape:", X_train.shape)
+        print("y_train shape:", y_train.shape)
+        if X_train.shape[0] == 0:
+            raise ValueError("❌ X_train is empty — check window size, data cleaning, or dataset preparation logic.")
+        input_shape = (window_size, X_train.shape[2])
+        print(input_shape, len(input_shape))
+        model = build_direction_model(input_shape)
+        model.summary()
+
+        # Step 5: Train
+        # Before training
+        if len(X_train) == 0 or len(y_train) == 0:
+            print("❌ Empty training data - debugging info:")
+            print("- Original data shape:", full_df.shape)
+            print("- Features after engineering:", generate_features(full_df, trading_type).shape)
+            print("- Unique symbols:", full_df['symbol'].unique())
+            print("- Date range:", full_df.index.min(), "to", full_df.index.max())
+            raise ValueError("Empty training data - see debug output above")
+        print("🚂 Training model...")
+        from sklearn.utils import class_weight
+        cw = class_weight.compute_class_weight(class_weight='balanced', classes=np.unique(y_train), y=y_train)
+        class_weights = dict(enumerate(cw))
+        trained_model, history = train_model(
+            model,
+            X_train, y_train,
+            X_val, y_val,
+            trading_type,
+            class_weights,
+            asset_name=str(assets[0]['symbol']),
+            epochs=epochs,
+            batch_size=batch_size
+        )
+        print("🎉 Training complete!")
+
+        y_pred = trained_model.predict(X_val)
+        y_pred_labels = (y_pred > 0.4).astype(int)
+        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+        print(confusion_matrix(y_val, y_pred_labels))
+        print("Accuracy:", accuracy_score(y_val, y_pred_labels))
+        print(classification_report(y_val, y_pred_labels))
+        print(f"to check imbalance{np.bincount(y_train)}")
+        print(f"to check imbalance{np.bincount(y_val)}")
+        # TODO: Stopping the model here until I can see an improvement
+        return "Done"
+
+        asset_name = assets[0]['news_query']
+        asset_symbol = assets[0]['symbol']
+        print(f"Fetching news for {asset_name}")
+        print("0 done -> next step")
+
+        # for crypto same news affects the general market, but it is different for forex
+        news = news_fetcher.get_latest_article(asset_symbol, trading_type)
+        print("1 done -> next step")
+        print(news)
+        sentiment_result = news_fetcher.process_sentiment(news, trading_type)
+        print(sentiment_result)
+        print("2 done -> result printed, step")
+
+        # Make prediction with sentiment
+        prediction = make_prediction(trained_model, news, sentiment_result)
+        print("3 done -> next step")
+        print("\n=== Prediction with Sentiment ===")
+        print(f"Base Prediction: {prediction['base_prediction']:.2%}")
+        print(f"Sentiment Score: {prediction['sentiment_score']:.2f}")
+        print(f"Adjusted Prediction: {prediction['adjusted_prediction']:.2%}")
+        print(f"Sentiment Weight: {prediction['sentiment_weight']:.0%}")
+
+        # Trading decision logic example
+        if prediction['adjusted_prediction'] > 0.6:
+            print("✅ Strong buy signal (positive sentiment)")
+        elif prediction['adjusted_prediction'] < 0.4:
+            print("🚨 Strong sell signal (negative sentiment)")
+        else:
+            print("➖ Neutral signal")
+    except Exception as e:
+        print(f"🔥 Pipeline failed: {str(e)}")
+        raise
 
 
 def make_prediction(model, market_data: pd.DataFrame, sentiment_score):
@@ -55,120 +186,6 @@ def make_prediction(model, market_data: pd.DataFrame, sentiment_score):
         'adjusted_prediction': adjusted_prediction,
         'sentiment_weight': sentiment_weight
     }
-
-
-def main():
-    global assets
-    try:
-        # TODO: change this to collect input from user later on then store the input in a list<dict>
-        if trading_type == "forex":
-            assets = [
-                # {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
-                {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
-                # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
-                # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
-                # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
-                # {'symbol': 'USDCAD=X', 'news_query': 'Dollar Canadian'}
-            ]
-        elif trading_type == "crypto":
-            assets = [
-                {'symbol': 'BTC/USD', 'news_query': 'Bitcoin'},
-                # {'symbol': 'ETH/USD', 'news_query': 'Ethereum'},
-                # {'symbol': 'SPY', 'news_query': 'S&P 500'}
-            ]
-
-        window_size = 60
-        epochs = 150
-        batch_size = 128
-        min_samples = 1000  # Minimum samples per asset
-        lookback_years = 10
-
-        # Step 1: Build dataset
-        print("🛠️ Building dataset...")
-        raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
-        print(f"✅ Dataset built for {len(raw_datasets)} assets")
-
-        # Step 2: Combine and validate
-        print("🧹 Combining and validating datasets...")
-        full_df = combine_datasets(raw_datasets)
-        full_df = validate_combined_data(full_df, trading_type, min_samples)
-        full_df.to_csv("data/combined_data_pipeline.csv", index=True)
-        print("✅ Saved all data to combined_data_pipeline.csv")
-        # Step 3: Prepare for training
-        print("⚙️ Preparing training data...")
-        # print(full_df.describe())
-        # print(full_df.columns)
-        # print(full_df.index.dtype)
-        # return full_df.head(100)
-        (X_train, y_train), (X_val, y_val) = prepare_dataset(
-            full_df, trading_type=trading_type,
-            window_size=window_size
-        )
-        return True
-        # Step 4: Build model
-        print("🏗️ Building model...")
-        print("X_train shape:", X_train.shape)
-        print("y_train shape:", y_train.shape)
-        if X_train.shape[0] == 0:
-            raise ValueError("❌ X_train is empty — check window size, data cleaning, or dataset preparation logic.")
-        input_shape = (window_size, X_train.shape[2])
-        print(input_shape, len(input_shape))
-        model = build_direction_model(input_shape)
-        model.summary()
-
-        # Step 5: Train
-        # Before training
-        if len(X_train) == 0 or len(y_train) == 0:
-            print("❌ Empty training data - debugging info:")
-            print("- Original data shape:", full_df.shape)
-            print("- Features after engineering:", generate_features(full_df, trading_type).shape)
-            print("- Unique symbols:", full_df['symbol'].unique())
-            print("- Date range:", full_df.index.min(), "to", full_df.index.max())
-            raise ValueError("Empty training data - see debug output above")
-        print("🚂 Training model...")
-        trained_model, history = train_model(
-            model,
-            X_train, y_train,
-            X_val, y_val,
-            trading_type,
-            epochs=epochs,
-            batch_size=batch_size
-        )
-
-        print("🎉 Training complete!")
-
-        asset_name = assets[0]['news_query']
-        asset_symbol = assets[0]['symbol']
-        print(f"Fetching news for {asset_name}")
-        print("0 done -> next step")
-
-        # for crypto same news affects the general market nut it is different for forex
-        news = news_fetcher.get_latest_article(asset_symbol, trading_type)
-        print("1 done -> next step")
-        print(news)
-        sentiment_result = news_fetcher.process_sentiment(news, trading_type)
-        print(sentiment_result)
-        print("2 done -> result printed, step")
-        # latest_market_data = raw_datasets[assets[0]['symbol']].iloc[-window_size * 2:]  # Last 2 windows
-        # Make prediction with sentiment
-        prediction = make_prediction(trained_model, news, sentiment_result)
-        print("3 done -> next step")
-        print("\n=== Prediction with Sentiment ===")
-        print(f"Base Prediction: {prediction['base_prediction']:.2%}")
-        print(f"Sentiment Score: {prediction['sentiment_score']:.2f}")
-        print(f"Adjusted Prediction: {prediction['adjusted_prediction']:.2%}")
-        print(f"Sentiment Weight: {prediction['sentiment_weight']:.0%}")
-
-        # Trading decision logic example
-        if prediction['adjusted_prediction'] > 0.6:
-            print("✅ Strong buy signal (positive sentiment)")
-        elif prediction['adjusted_prediction'] < 0.4:
-            print("🚨 Strong sell signal (negative sentiment)")
-        else:
-            print("➖ Neutral signal")
-    except Exception as e:
-        print(f"🔥 Pipeline failed: {str(e)}")
-        raise
 
 
 if __name__ == "__main__":
