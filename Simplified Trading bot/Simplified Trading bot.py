@@ -1,36 +1,35 @@
 import os
 import random
-from typing import Dict
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 from data_pipeline import build_dataset, combine_datasets, validate_combined_data
 from model_builder_ST import build_direction_model, prepare_dataset, train_model, generate_features
+from news_scraper import News_scraper
+
 # from News_analysis import AssetNewsFetcher
 # news_fetcher = AssetNewsFetcher()
-
-from news_scraper import News_scraper
 
 news_fetcher = News_scraper()
 
 # Set random seeds for reproducibility
 SEED = 42
-window_size = 60
 os.environ['PYTHONHASHSEED'] = str(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
-tf.keras.mixed_precision.set_global_policy('mixed_float16')
+tf.keras.mixed_precision.set_global_policy('float32')
 
 # User data
 trading_type = "forex"
 if trading_type == "forex":
     # TODO: move to user data section
     assets = [
-        # {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
-        {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
+        {'symbol': 'EURUSD=X', 'news_query': 'Euro Dollar'},
+        # {'symbol': 'USDJPY=X', 'news_query': 'Dollar Yen'},
         # {'symbol': 'GBPUSD=X', 'news_query': 'Pound Dollar'},
         # {'symbol': 'USDCHF=X', 'news_query': 'Dollar Swiss Franc'},
         # {'symbol': 'AUDUSD=X', 'news_query': 'Aussie Dollar'},
@@ -49,11 +48,15 @@ def main():
     try:
         # TODO: change this to collect input from user later on then store the input in a list<dict>
 
-        window_size = 60
-        epochs = 150
+        epochs = 100
         batch_size = 128
         min_samples = 1000  # Minimum samples per asset
         lookback_years = 10
+        LOOKAHEAD_PERIOD = 1  # Predict direction 4 periods ahead (4 days ahead)
+        window_size = 120
+        # THRESHOLD = 0.0015  # Minimum price movement threshold
+        THRESHOLD = 0.0015
+
 
         # Step 1: Build dataset
         print("🛠️ Building dataset...")
@@ -74,6 +77,8 @@ def main():
         # return full_df.head(100)
         (X_train, y_train), (X_val, y_val) = prepare_dataset(
             full_df, trading_type=trading_type,
+            LOOKAHEAD_PERIOD=LOOKAHEAD_PERIOD,
+            THRESHOLD=THRESHOLD,
             window_size=window_size
         )
         # Step 4: Build model
@@ -98,12 +103,23 @@ def main():
             raise ValueError("Empty training data - see debug output above")
         print("🚂 Training model...")
         from sklearn.utils import class_weight
-        cw = class_weight.compute_class_weight(class_weight='balanced', classes=np.unique(y_train), y=y_train)
-        class_weights = dict(enumerate(cw))
+        y_train_adj = y_train + 1  # -1 → 0, 0 → 1, 1 → 2
+        y_val_adj = y_val + 1
+        classes = np.unique(y_train_adj)
+        cw = class_weight.compute_class_weight('balanced', classes=classes, y=y_train_adj)
+        class_weights = dict(zip(classes, cw))
+        # Shift labels so that -1 → 0, 0 → 1, 1 → 2
+        print("Unique labels:", np.unique(y_train_adj))
+        print("Label dtype:", y_train_adj.dtype)
+        print("Any NaNs in y?", np.isnan(y_train_adj).any())
+        print("Any NaNs in X?", np.isnan(X_train).any())
+
+        y_train_adj = y_train_adj.astype('int64')
+        y_val_adj = y_val_adj.astype('int64')
         trained_model, history = train_model(
             model,
-            X_train, y_train,
-            X_val, y_val,
+            X_train, y_train_adj,
+            X_val, y_val_adj,
             trading_type,
             class_weights,
             asset_name=str(assets[0]['symbol']),
@@ -113,8 +129,8 @@ def main():
         print("🎉 Training complete!")
 
         y_pred = trained_model.predict(X_val)
-        y_pred_labels = (y_pred > 0.4).astype(int)
-        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+        # y_pred_labels = np.argmax(y_pred, axis=1)
+        y_pred_labels = np.argmax(y_pred, axis=1) - 1
         print(confusion_matrix(y_val, y_pred_labels))
         print("Accuracy:", accuracy_score(y_val, y_pred_labels))
         print(classification_report(y_val, y_pred_labels))
@@ -137,7 +153,7 @@ def main():
         print("2 done -> result printed, step")
 
         # Make prediction with sentiment
-        prediction = make_prediction(trained_model, news, sentiment_result)
+        prediction = make_prediction(window_size, trained_model, news, sentiment_result)
         print("3 done -> next step")
         print("\n=== Prediction with Sentiment ===")
         print(f"Base Prediction: {prediction['base_prediction']:.2%}")
@@ -157,7 +173,7 @@ def main():
         raise
 
 
-def make_prediction(model, market_data: pd.DataFrame, sentiment_score):
+def make_prediction(window_size, model, market_data: pd.DataFrame, sentiment_score):
     """
     Make prediction using model and adjust with sentiment score
     Args:

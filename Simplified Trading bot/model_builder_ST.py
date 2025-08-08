@@ -19,14 +19,16 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.metrics import Precision, Recall, AUC
 
-# Configuration
-WINDOW_SIZE = 60  # Sequence length
-LOOKAHEAD_PERIOD = 4  # Predict direction 4 periods ahead
-# THRESHOLD = 0.0015  # Minimum price movement threshold
-THRESHOLD = 0.003  # Increased from 0.0015
+
+# # Configuration
+# Shorter window(30–60) → Captures short - term momentum,
+# reacts fast to news, but may miss longer patterns.
+
+# Longer window(120–240) → Captures trend context, but may
+# introduce noise for short - term predictions and require more data per sample.
 
 
-def create_sequences(data, targets, window_size=WINDOW_SIZE):
+def create_sequences(data, targets, window_size):
     """Create time-series sequences for LSTM forecasting"""
     X, y = [], []
     for i in range(window_size, len(data)):
@@ -108,20 +110,28 @@ def generate_features(data, trading_type):
     return data.dropna(subset=essential)
 
 
-def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
+def create_direction_labels(data, lookahead, threshold):
+    data['future_close'] = data['close'].shift(-lookahead)
+    pct_change = (data['future_close'] - data['close']) / data['close']
+
+    data['direction'] = np.where(
+        pct_change > threshold, 1,
+        np.where(pct_change < -threshold, -1, 0)
+    )
+    return data
+
+
+def prepare_dataset(dataset, trading_type, LOOKAHEAD_PERIOD, THRESHOLD, window_size):
     """More robust dataset preparation"""
     try:
         # Feature engineering
         data = generate_features(dataset, trading_type)
         # Create target
         # data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD) # for multiple symbols
-        data['future_close'] = data['close'].shift(-LOOKAHEAD_PERIOD)
-        data['direction'] = np.where(
-            data['future_close'] > data['close'] * (1 + THRESHOLD), 1, 0
-        )
+        data = create_direction_labels(data, lookahead=LOOKAHEAD_PERIOD, threshold=THRESHOLD)
 
         # split data
-        split_idx = int(len(data) * 0.95)
+        split_idx = int(len(data) * 0.70)
         train_data = data.iloc[:split_idx]
         val_data = data.iloc[split_idx:]
 
@@ -130,10 +140,12 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
         if trading_type == "forex":
             possible_features = [
                 'open', 'high', 'low', 'close', 'returns',
-                # 'momentum',
-                # 'rsi', 'macd_line', 'macd_signal', 'macd_diff', 'stoch',
-                # 'atr', 'atr_pct', 'bb_width',
-                # 'hour', 'day_of_week', 'month'
+                'momentum',
+                'rsi', 'macd_line', 'macd_signal', 'macd_diff',
+                # 'stoch',
+                'atr',
+                'atr_pct', 'bb_width',
+                'hour', 'day_of_week', 'month'
                 # 'kst', 'squeeze'
             ]
         elif trading_type == "crypto":
@@ -162,11 +174,15 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
                 scaler = MinMaxScaler()
                 scaled = group.copy()
                 scalers[symbol] = scaler
-                scaled[features] = scaler.fit_transform(group[features])
+                # scaled[features] = scaler.fit_transform(group[features])
+                scaled[features] = scaler.fit_transform(group[features].fillna(0))
                 train_scaled.append(scaled)
 
         train_scaled = pd.concat(train_scaled)
         train_scaled["Date"] = train_scaled.index
+
+        # print("Train class distribution:", train_data[features].value_counts())
+        print("Validation class distribution:", val_data['direction'].value_counts())
 
         # train_scaled.to_csv("data/scaled_data.csv", index=True)
         # print("✅ Saved  scaled date to combined_data_pipeline.csv")
@@ -183,13 +199,15 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
         # print(f"These are the Column for the trained data: {train_scaled[features].columns}")
         # print(f"These are the Column for the Val_data: {val_scaled[features].columns}")
 
-        train_scaled[features].to_csv("data/train_scaled.csv", index=True)
-        print("saved x_val")
-        train_scaled["direction"].to_csv("data/train_scaled_direction.csv", index=True)
-        print("saved directions")
+        # train_scaled[features].to_csv("data/train_scaled.csv", index=True)
+        # print("saved x_val")
+        # train_scaled["direction"].to_csv("data/train_scaled_direction.csv", index=True)
+        # print("saved directions")
+
+
         # Create sequences
-        X_train, y_train = create_sequences(train_scaled[features].values, train_scaled['direction'].values)
-        X_val, y_val = create_sequences(val_scaled[features].values, val_scaled['direction'].values)
+        X_train, y_train = create_sequences(train_scaled[features].values, train_scaled['direction'].values, window_size)
+        X_val, y_val = create_sequences(val_scaled[features].values, val_scaled['direction'].values, window_size)
 
         return (X_train, y_train), (X_val, y_val)
 
@@ -199,89 +217,60 @@ def prepare_dataset(dataset, trading_type, window_size=WINDOW_SIZE):
         empty = np.array([])
         return (empty, empty), (empty, empty)
 
-
+# working model
 # def build_direction_model(input_shape):
-#     """Build enhanced model for directional prediction"""
 #     inputs = Input(shape=input_shape)
-#     # Feature normalization
 #     x = BatchNormalization()(inputs)
-#
-#     # Temporal feature extraction
-#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
-#                kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-#     x = Conv1D(256, kernel_size=3, activation='relu', padding='causal',
-#                kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-#
-#     x = BatchNormalization()(x)
+#     x = Conv1D(64, 3, activation='relu', padding='causal')(x)
+#     x = LSTM(64, return_sequences=True)(x)
+#     x = LSTM(32)(x)
+#     x = Dense(32, activation='relu')(x)
 #     x = Dropout(0.3)(x)
-#     # Hierarchical LSTM
-#     x = LSTM(256, return_sequences=True)(x)
-#     x = Dropout(0.3)(x)
-#     x = LSTM(128, return_sequences=True)(x)
-#     x = Dropout(0.3)(x)
-#     x = LSTM(64)(x)
-#
-#     # Simplified attention mechanism
-#     attention = Dense(64, activation='tanh')(x)
-#     attention = Dense(1, activation='sigmoid')(attention)
-#     x = Multiply()([x, attention])
-#
-#     # Output - single scalar with sigmoid activation for binary classification
-#     output = Dense(1, activation='sigmoid', kernel_regularizer=tf.keras.regularizers.l2(1e-4)
-#                    )(x)
-#
-#     model = Model(inputs=inputs, outputs=output)
+#     outputs = Dense(3, activation='softmax')(x)
+#     model = Model(inputs, outputs)
 #     model.compile(
-#         optimizer=Adam(learning_rate=0.0005),
-#         loss='binary_crossentropy',
-#         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
+#         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
+#         loss='sparse_categorical_crossentropy',
+#         metrics=['accuracy']
 #     )
 #     return model
 
 
 def build_direction_model(input_shape):
+    """Build enhanced model for directional prediction"""
     inputs = Input(shape=input_shape)
+    # Feature normalization
+    x = BatchNormalization()(inputs)
 
-    # Feature-wise normalization
-    x = BatchNormalization(axis=-1)(inputs)
-
-    # Temporal convolution blocks with feature-aware kernels
-    x = Conv1D(64, kernel_size=5, activation='relu', padding='causal',
-               kernel_regularizer=l2(1e-4))(x)
+    # Temporal feature extraction
     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
-               kernel_regularizer=l2(1e-4))(x)
+               kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
+    x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
+               kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
+
     x = BatchNormalization()(x)
-    x = Dropout(0.4)(x)
-
-    # Feature-reduction convolution
-    x = Conv1D(64, kernel_size=1, activation='relu')(x)  # Reduce feature dimensions
-
-    # Depthwise separable convolution for efficiency
-    x = Conv1D(128, kernel_size=3, activation='relu', padding='same',
-               groups=8, kernel_regularizer=l2(1e-4))(x)
-
-    # Hierarchical LSTM processing
-    x = LSTM(128, return_sequences=True)(x)
-    x = LSTM(64, return_sequences=False)(x)
-
-    # Feature refinement
-    x = Dense(64, activation='relu')(x)
     x = Dropout(0.5)(x)
+    # Hierarchical LSTM
+    x = LSTM(128, return_sequences=True)(x)
+    x = Dropout(0.5)(x)
+    x = LSTM(64, return_sequences=True)(x)
+    x = Dropout(0.4)(x)
+    x = LSTM(32)(x)
 
-    # Output layer
-    output = Dense(1, activation='sigmoid')(x)
+    # Simplified attention mechanism
+    attention = Dense(32, activation='tanh')(x)
+    attention = Dense(1, activation='sigmoid')(attention)
+    x = Multiply()([x, attention])
+
+    output = Dense(3, activation='softmax', kernel_regularizer=tf.keras.regularizers.l2(1e-3)
+                   )(x)
 
     model = Model(inputs=inputs, outputs=output)
-
-    # Optimizer with warmup
-    opt = Adam(learning_rate=0.00015)
-
     model.compile(
-        optimizer=opt,
-        loss='binary_crossentropy',
-        metrics=['accuracy', Precision(name='prec'), Recall(name='rec'), AUC(name='auc')]
-    )
-
+            optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
+            loss='sparse_categorical_crossentropy',
+            metrics=['accuracy']
+        )
     return model
 
 
@@ -292,22 +281,22 @@ def build_direction_model(input_shape):
 #     x = BatchNormalization(axis=-1)(inputs)
 #
 #     # Temporal convolution blocks with feature-aware kernels
-#     # x = Conv1D(64, kernel_size=5, activation='relu', padding='causal',
-#     #            kernel_regularizer=l2(1e-4))(x)
-#     # x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
-#     #            kernel_regularizer=l2(1e-4))(x)
-#     # x = BatchNormalization()(x)
-#     # x = Dropout(0.4)(x)
-#     #
-#     # # Feature-reduction convolution
-#     # x = Conv1D(64, kernel_size=1, activation='relu')(x)  # Reduce feature dimensions
-#     #
-#     # # Depthwise separable convolution for efficiency
-#     # x = Conv1D(128, kernel_size=3, activation='relu', padding='same',
-#     #            groups=8, kernel_regularizer=l2(1e-4))(x)
+#     x = Conv1D(64, kernel_size=5, activation='relu', padding='causal',
+#                kernel_regularizer=l2(1e-4))(x)
+#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
+#                kernel_regularizer=l2(1e-4))(x)
+#     x = BatchNormalization()(x)
+#     x = Dropout(0.4)(x)
+#
+#     # Feature-reduction convolution
+#     x = Conv1D(64, kernel_size=1, activation='relu')(x)  # Reduce feature dimensions
+#
+#     # Depthwise separable convolution for efficiency
+#     x = Conv1D(128, kernel_size=3, activation='relu', padding='same',
+#                groups=8, kernel_regularizer=l2(1e-4))(x)
 #
 #     # Hierarchical LSTM processing
-#     x = LSTM(64, return_sequences=True)(x)
+#     x = LSTM(128, return_sequences=True)(x)
 #     x = LSTM(64, return_sequences=False)(x)
 #
 #     # Feature refinement
@@ -325,31 +314,82 @@ def build_direction_model(input_shape):
 #     model.compile(
 #         optimizer=opt,
 #         loss='binary_crossentropy',
-#         metrics=['accuracy', Precision(name='prec'), Recall(name='rec')]
+#         metrics=['accuracy', Precision(name='prec'), Recall(name='rec'), AUC(name='auc')]
+#     )
+#
+#     return model
+
+
+#working model
+# def build_direction_model(input_shape):
+#     inputs = Input(shape=input_shape)
+#     x = BatchNormalization()(inputs)
+#     x = Conv1D(64, 3, activation='relu', padding='causal')(x)
+#     x = LSTM(64, return_sequences=True)(x)
+#     x = LSTM(32)(x)
+#     x = Dense(32, activation='relu')(x)
+#     x = Dropout(0.3)(x)
+#     outputs = Dense(3, activation='softmax')(x)
+#     model = Model(inputs, outputs)
+#     model.compile(
+#         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
+#         loss='sparse_categorical_crossentropy',
+#         metrics=['accuracy']
 #     )
 #     return model
 
 
 # def build_direction_model(input_shape):
-#     model = keras.Sequential()
-#     model.add(LSTM(units=64, return_sequences=True, input_shape=input_shape))
-#     model.add(LSTM(units=64, return_sequences= False))
-#     model.add(Dense(units=128, activation='relu'))
-#     model.add(Dropout(0.2))
-#     model.add(Dense(units=1))
-#     model.compile(loss='mae', optimizer='adam', metrics=['accuracy', Precision(name='prec'), Recall(name='rec')])
+#     inputs = Input(shape=input_shape)
+#     # Feature-wise normalization
+#     x = BatchNormalization(axis=-1)(inputs)
+#     # Temporal convolution blocks with feature-aware kernels
+#     x = Conv1D(64, kernel_size=5, activation='relu', padding='causal',
+#                kernel_regularizer=l2(1e-4))(x)
+#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
+#                kernel_regularizer=l2(1e-4))(x)
+#     x = BatchNormalization()(x)
+#     x = Dropout(0.4)(x)
+#
+#     # Feature-reduction convolution
+#     x = Conv1D(64, kernel_size=1, activation='relu')(x)  # Reduce feature dimensions
+#
+#     # Depthwise separable convolution for efficiency
+#     x = Conv1D(128, kernel_size=3, activation='relu', padding='same',
+#                groups=8, kernel_regularizer=l2(1e-4))(x)
+#     # Hierarchical LSTM processing
+#     # x = LSTM(128, return_sequences=True)(x)
+#     x = LSTM(64, return_sequences=True)(x)
+#     x = LSTM(32, return_sequences=False)(x)
+#     # Feature refinement
+#     x = Dense(32, activation='relu')(x)
+#     x = Dropout(0.5)(x)
+#     # Output layer
+#     output = Dense(3, activation='softmax')(x)
+#     model = Model(inputs=inputs, outputs=output)
+#     # Optimizer with warmup
+#     opt = Adam(learning_rate=0.0005)
+#     model.compile(
+#         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
+#         loss='sparse_categorical_crossentropy',
+#         metrics=['accuracy']
+#     )
 #     return model
 
 
-def train_model(model, X_train, y_train, X_val, y_val, trading_type,class_weight, asset_name, epochs=100, batch_size=64):
+
+
+
+def train_model(model, X_train, y_train, X_val, y_val, trading_type, class_weight, asset_name, epochs,
+                batch_size):
     """Train directional model with callbacks"""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     os.makedirs("models", exist_ok=True)
 
     callbacks = [
-        EarlyStopping(patience=15, mode="max", min_delta=0.01, restore_best_weights=True),
+        EarlyStopping(patience=8, mode="max", min_delta=0.01, restore_best_weights=True),
         ModelCheckpoint(
-            f"models/best_model_{timestamp}.h5",
+            f"models/best_model_checkpoint:{timestamp}.h5",
             save_best_only=True,
             monitor='val_loss'
         ),
