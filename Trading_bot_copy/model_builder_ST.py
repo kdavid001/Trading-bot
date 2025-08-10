@@ -9,7 +9,17 @@ from tensorflow.keras.callbacks import (
     EarlyStopping, ModelCheckpoint,
     ReduceLROnPlateau
 )
-from tensorflow.keras.layers import LayerNormalization, MultiHeadAttention, GlobalAveragePooling1D, Embedding
+import tensorflow as tf
+from tensorflow.keras.layers import (
+    Input,
+    BatchNormalization,
+    Embedding,
+    LayerNormalization,
+    MultiHeadAttention,
+    Dense,
+    Dropout,
+    GlobalAveragePooling1D
+)
 from tensorflow.keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
 import os
@@ -130,12 +140,12 @@ def create_direction_labels(data, lookahead, threshold):
 def prepare_dataset(dataset, trading_type, LOOKAHEAD_PERIOD, THRESHOLD, window_size):
     """More robust dataset preparation"""
     try:
-        # Feature engineering
-        data = generate_features(dataset, trading_type)
-        # Create target
-        # data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD) # for multiple symbols
-        data = create_direction_labels(data, lookahead=LOOKAHEAD_PERIOD, threshold=THRESHOLD)
-
+        # # Feature engineering
+        # data = generate_features(dataset, trading_type)
+        # # Create target
+        # # data['future_close'] = data.groupby('symbol')['close'].shift(-LOOKAHEAD_PERIOD) # for multiple symbols
+        # data = create_direction_labels(data, lookahead=LOOKAHEAD_PERIOD, threshold=THRESHOLD)
+        data = dataset.copy()
         # split data
         split_idx = int(len(data) * 0.70)
         train_data = data.iloc[:split_idx]
@@ -146,13 +156,13 @@ def prepare_dataset(dataset, trading_type, LOOKAHEAD_PERIOD, THRESHOLD, window_s
         if trading_type == "forex":
             possible_features = [
                 'open', 'high', 'low', 'close',
-                'returns', 'momentum',
-                'rsi', 'macd_line', 'macd_signal', 'macd_diff',
-                'stoch',
-                'atr',
-                'atr_pct', 'bb_width',
-                'hour', 'day_of_week', 'month'
-                'kst', 'squeeze'
+                # 'returns', 'momentum',
+                # 'rsi', 'macd_line', 'macd_signal', 'macd_diff',
+                # 'stoch',
+                # 'atr',
+                # 'atr_pct', 'bb_width',
+                # 'hour', 'day_of_week', 'month'
+                # 'kst', 'squeeze'
             ]
         elif trading_type == "crypto":
             possible_features = [
@@ -163,57 +173,21 @@ def prepare_dataset(dataset, trading_type, LOOKAHEAD_PERIOD, THRESHOLD, window_s
             ]
         features = [f for f in possible_features if f in data.columns]
 
-        # scaling for forex done to focus on multiple symbols just incase.
-        scalers = {}
-        train_scaled = []
-        if trading_type == 'crypto':
-            for symbol, group in train_data.groupby('symbol'):
-                scaler = MinMaxScaler()
-                scaled = group.copy()
-                scaled[features] = scaler.fit_transform(group[features])
-                scalers[symbol] = scaler
-                train_scaled.append(scaled)
+        # Select feature columns and target separately
+        X_train_raw = train_data[features].values
+        y_train_raw = train_data['close'].values
 
+        X_val_raw = val_data[features].values
+        y_val_raw = val_data['close'].values
 
-        elif trading_type == 'forex':
-            for symbol, group in train_data.groupby('symbol'):
-                scaler = MinMaxScaler()
-                scaled = group.copy()
-                scalers[symbol] = scaler
-                # scaled[features] = scaler.fit_transform(group[features])
-                scaled[features] = scaler.fit_transform(group[features].fillna(0))
-                train_scaled.append(scaled)
+        # Scale features only (do NOT scale target)
+        scaler = MinMaxScaler()
+        X_train_scaled = scaler.fit_transform(X_train_raw)
+        X_val_scaled = scaler.transform(X_val_raw)
 
-        train_scaled = pd.concat(train_scaled)
-        train_scaled["Date"] = train_scaled.index
-
-        # print("Train class distribution:", train_data[features].value_counts())
-        print("Validation class distribution:", val_data['direction'].value_counts())
-
-        # train_scaled.to_csv("data/scaled_data.csv", index=True)
-        # print("✅ Saved  scaled date to combined_data_pipeline.csv")
-
-        # Scale validation data
-        val_scaled = []
-        for symbol, group in val_data.groupby('symbol'):
-            if symbol in scalers:
-                scaled = group.copy()
-                scaled[features] = scalers[symbol].transform(group[features])
-                val_scaled.append(scaled)
-        val_scaled = pd.concat(val_scaled)
-
-        # print(f"These are the Column for the trained data: {train_scaled[features].columns}")
-        # print(f"These are the Column for the Val_data: {val_scaled[features].columns}")
-
-        # train_scaled[features].to_csv("data/train_scaled.csv", index=True)
-        # print("saved x_val")
-        # train_scaled["direction"].to_csv("data/train_scaled_direction.csv", index=True)
-        # print("saved directions")
-
-
-        # Create sequences
-        X_train, y_train = create_sequences(train_scaled[features].values, train_scaled['direction'].values, window_size)
-        X_val, y_val = create_sequences(val_scaled[features].values, val_scaled['direction'].values, window_size)
+        # Create sequences from scaled features and original target values
+        X_train, y_train = create_sequences(X_train_scaled, y_train_raw, window_size)
+        X_val, y_val = create_sequences(X_val_scaled, y_val_raw, window_size)
 
         return (X_train, y_train), (X_val, y_val)
 
@@ -223,80 +197,26 @@ def prepare_dataset(dataset, trading_type, LOOKAHEAD_PERIOD, THRESHOLD, window_s
         empty = np.array([])
         return (empty, empty), (empty, empty)
 
+
 # working model
-def build_direction_model(input_shape):
-    inputs = Input(shape=input_shape)
-    x = BatchNormalization()(inputs)
-    x = Conv1D(64, 3, activation='relu', padding='causal')(x)
-    x = LSTM(64, return_sequences=True)(x)
-    x = LSTM(32)(x)
-    x = Dense(32, activation='relu')(x)
-    x = Dropout(0.3)(x)
-    outputs = Dense(3, activation='softmax')(x)
-    model = Model(inputs, outputs)
-    model.compile(
-        optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    return model
-
-
 # def build_direction_model(input_shape):
-#     """Build enhanced model for directional prediction"""
 #     inputs = Input(shape=input_shape)
-#     # Feature normalization
 #     x = BatchNormalization()(inputs)
-#
-#     # Temporal feature extraction
-#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
-#                kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-#     x = Conv1D(128, kernel_size=3, activation='relu', padding='causal',
-#                kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
-#
-#     x = BatchNormalization()(x)
-#     x = Dropout(0.5)(x)
-#     # Hierarchical LSTM
-#     x = LSTM(128, return_sequences=True)(x)
-#     x = Dropout(0.5)(x)
+#     x = Conv1D(64, 3, activation='relu', padding='causal')(x)
 #     x = LSTM(64, return_sequences=True)(x)
-#     x = Dropout(0.4)(x)
 #     x = LSTM(32)(x)
-#
-#     # Simplified attention mechanism
-#     attention = Dense(32, activation='tanh')(x)
-#     attention = Dense(1, activation='sigmoid')(attention)
-#     x = Multiply()([x, attention])
-#
-#     output = Dense(3, activation='softmax', kernel_regularizer=tf.keras.regularizers.l2(1e-3)
-#                    )(x)
-#
-#     model = Model(inputs=inputs, outputs=output)
+#     x = Dense(32, activation='relu')(x)
+#     x = Dropout(0.3)(x)
+#     outputs = Dense(1, activation='linear')(x)
+#     model = Model(inputs, outputs)
 #     model.compile(
-#             optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
-#             loss='sparse_categorical_crossentropy',
-#             metrics=['accuracy']
-#         )
+#         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
+#         loss='mean_squared_error',
+#         metrics=['mean_absolute_error', 'mean_squared_error']
+#     )
 #     return model
 
 
-
-#
-# def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
-#     # Normalization + MHA
-#     x = LayerNormalization(epsilon=1e-6)(inputs)
-#     x = MultiHeadAttention(num_heads=num_heads, key_dim=head_size, dropout=dropout)(x, x)
-#     x = Dropout(dropout)(x)
-#     res = x + inputs  # Residual connection
-#
-#     # Feed Forward
-#     x = LayerNormalization(epsilon=1e-6)(res)
-#     x = Dense(ff_dim, activation="relu")(x)
-#     x = Dropout(dropout)(x)
-#     x = Dense(inputs.shape[-1], activation="linear")(x)
-#     return x + res  # Residual connection
-#
-#
 # def build_direction_model(input_shape):
 #     inputs = Input(shape=input_shape)
 #     x = BatchNormalization()(inputs)
@@ -313,15 +233,16 @@ def build_direction_model(input_shape):
 #     # Classification head
 #     x = GlobalAveragePooling1D()(x)
 #     x = Dropout(0.4)(x)
-#     outputs = Dense(3, activation="softmax")(x)
+#     outputs = Dense(1, activation="linear")(x)
 #
 #     model = Model(inputs, outputs)
 #     model.compile(
-#         optimizer=Adam(learning_rate=0.0005),
-#         loss="sparse_categorical_crossentropy",
-#         metrics=["accuracy"]
+#         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
+#         loss='mean_squared_error',
+#         metrics=['mean_absolute_error', 'mean_squared_error']
 #     )
 #     return model
+
 
 # def build_direction_model(input_shape):
 #     inputs = Input(shape=input_shape)
@@ -369,25 +290,7 @@ def build_direction_model(input_shape):
 #     return model
 
 
-#working model
-# def build_direction_model(input_shape):
-#     inputs = Input(shape=input_shape)
-#     x = BatchNormalization()(inputs)
-#     x = Conv1D(64, 3, activation='relu', padding='causal')(x)
-#     x = LSTM(64, return_sequences=True)(x)
-#     x = LSTM(32)(x)
-#     x = Dense(32, activation='relu')(x)
-#     x = Dropout(0.3)(x)
-#     outputs = Dense(3, activation='softmax')(x)
-#     model = Model(inputs, outputs)
-#     model.compile(
-#         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
-#         loss='sparse_categorical_crossentropy',
-#         metrics=['accuracy']
-#     )
-#     return model
-
-
+#
 # def build_direction_model(input_shape):
 #     inputs = Input(shape=input_shape)
 #     # Feature-wise normalization
@@ -414,44 +317,82 @@ def build_direction_model(input_shape):
 #     x = Dense(32, activation='relu')(x)
 #     x = Dropout(0.5)(x)
 #     # Output layer
-#     output = Dense(3, activation='softmax')(x)
+#     output = Dense(1, activation='linear')(x)
 #     model = Model(inputs=inputs, outputs=output)
-#     # Optimizer with warmup
-#     opt = Adam(learning_rate=0.0005)
 #     model.compile(
 #         optimizer=Adam(learning_rate=0.0005, clipnorm=0.1),
-#         loss='sparse_categorical_crossentropy',
-#         metrics=['accuracy']
+#         loss='mean_squared_error',
+#         metrics=['mean_absolute_error', 'mean_squared_error']
 #     )
 #     return model
+#
 
 
 
+def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
+    # Normalization + MHA
+    x = LayerNormalization(epsilon=1e-6)(inputs)
+    x = MultiHeadAttention(num_heads=num_heads, key_dim=head_size, dropout=dropout)(x, x)
+    x = Dropout(dropout)(x)
+    res = x + inputs  # Residual connection
+
+    # Feed Forward
+    x = LayerNormalization(epsilon=1e-6)(res)
+    x = Dense(ff_dim, activation="relu")(x)
+    x = Dropout(dropout)(x)
+    x = Dense(inputs.shape[-1], activation="linear")(x)
+    return x + res  # Residual connection
 
 
-def train_model(model, X_train, y_train, X_val, y_val, trading_type, class_weight, asset_name, epochs,
+import numpy as np
+import tensorflow as tf
+
+def get_positional_encoding(sequence_len, d_model):
+    position = np.arange(sequence_len)[:, np.newaxis]  # (sequence_len, 1)
+    div_term = np.exp(np.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))  # (d_model/2,)
+
+    pe = np.zeros((sequence_len, d_model))
+    pe[:, 0::2] = np.sin(position * div_term)
+    pe[:, 1::2] = np.cos(position * div_term)
+
+    pe = pe[np.newaxis, ...]  # shape (1, sequence_len, d_model)
+    return tf.cast(pe, dtype=tf.float32)
+
+def build_direction_model(input_shape):
+    inputs = tf.keras.Input(shape=input_shape)
+    x = tf.keras.layers.BatchNormalization()(inputs)
+
+    # Generate positional encoding tensor once
+    pos_encoding = get_positional_encoding(input_shape[0], input_shape[1])
+    # Add positional encoding to inputs
+    x = x + pos_encoding
+
+    for _ in range(3):
+        x = transformer_encoder(x, head_size=64, num_heads=4, ff_dim=128, dropout=0.3)
+
+    x = tf.keras.layers.GlobalAveragePooling1D()(x)
+    x = tf.keras.layers.Dropout(0.4)(x)
+    outputs = tf.keras.layers.Dense(1, activation='linear')(x)  # Regression output
+
+    model = tf.keras.Model(inputs, outputs)
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0005, clipnorm=0.1),
+        loss='mean_squared_error',
+        metrics=['mean_absolute_error', 'mean_squared_error']
+    )
+    return model
+
+def train_model(model, X_train, y_train, X_val, y_val, trading_type, asset_name, epochs,
                 batch_size):
     """Train directional model with callbacks"""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     os.makedirs("models", exist_ok=True)
 
     callbacks = [
-        EarlyStopping(patience=8, mode="max", min_delta=0.01, restore_best_weights=True),
-        ModelCheckpoint(
-            f"models/best_model_checkpoint:{timestamp}.h5",
-            save_best_only=True,
-            monitor='val_loss'
-        ),
-        ReduceLROnPlateau(
-            monitor='val_loss',
-            factor=0.7,
-            patience=5,
-            min_lr=1e-6,
-            cooldown=2,
-        )
+        tf.keras.callbacks.EarlyStopping(patience=8, restore_best_weights=True),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.7, patience=5, min_lr=1e-6)
     ]
 
-    print("\n🔥 Training directional model...")
     history = model.fit(
         X_train, y_train,
         validation_data=(X_val, y_val),
@@ -467,15 +408,15 @@ def train_model(model, X_train, y_train, X_val, y_val, trading_type, class_weigh
     print(f"\n💾 Model saved to: models/direction_model_{trading_type}_{timestamp}_{asset_name}.keras")
     return model, history
 
-feature_names = [
-                'open', 'high', 'low', 'close', 'returns',
-                'momentum',
-                'rsi', 'macd_line', 'macd_signal', 'macd_diff',
-                # 'stoch',
-                'atr',
-                'atr_pct', 'bb_width',
-                'hour', 'day_of_week', 'month']
 
+feature_names = [
+    'open', 'high', 'low', 'close', 'returns',
+    'momentum',
+    'rsi', 'macd_line', 'macd_signal', 'macd_diff',
+    # 'stoch',
+    'atr',
+    'atr_pct', 'bb_width',
+    'hour', 'day_of_week', 'month']
 
 
 # --- SHAP feature importance explanation function ---

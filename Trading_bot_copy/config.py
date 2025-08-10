@@ -1,0 +1,13 @@
+# config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+CONFIG = {
+    'alpha_vantage': os.getenv('ALPHA_VANTAGE_KEY'),
+    'twelvedata': os.getenv('TWELVEDATA_KEY'),
+    'newsapi': os.getenv('NEWSAPI_KEY'),
+    'alpaca_key': os.getenv('ALPACA_KEY_ID'),
+    'alpaca_secret': os.getenv('ALPACA_SECRET_KEY')
+}

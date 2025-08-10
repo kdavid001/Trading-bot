@@ -49,30 +49,33 @@ def main():
     try:
         # TODO: change this to collect input from user later on then store the input in a list<dict>
 
-        epochs = 100
+        epochs = 30
         batch_size = 128
-        min_samples = 500  # Minimum samples per asset
-        lookback_years = 5
-        LOOKAHEAD_PERIOD = 1  # Predict direction 1 periods ahead (1 day ahead)
-        window_size = 120
+        min_samples = 1000  # Minimum samples per asset
+        lookback_years = 10
+        LOOKAHEAD_PERIOD = 4  # Predict direction 4 periods ahead (4 days ahead)
+        window_size = 60
         # THRESHOLD = 0.0015  # Minimum price movement threshold
         THRESHOLD = 0.0015
-        # interval =
 
 
         # Step 1: Build dataset
         print("🛠️ Building dataset...")
-        raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
-        print(f"✅ Dataset built for {len(raw_datasets)} assets")
+        # raw_datasets = build_dataset(assets, lookback_years=lookback_years, trading_type=trading_type)
+        # print(type(raw_datasets))
+        # # return 0
+        full_df = pd.read_csv('data/eur_data.csv')
+        # print(f"✅ Dataset built for {len(raw_datasets)} assets")
 
-        # Step 2: Combine and validate
-        print("🧹 Combining and validating datasets...")
-        full_df = combine_datasets(raw_datasets)
-        full_df = validate_combined_data(full_df, trading_type, min_samples)
-        full_df.to_csv("data/combined_data_pipeline.csv", index=True)
-        print("✅ Saved all data to combined_data_pipeline.csv")
+
+        # # Step 2: Combine and validate
+        # print("🧹 Combining and validating datasets...")
+        # full_df = combine_datasets(raw_datasets)
+        # full_df = validate_combined_data(full_df, trading_type, min_samples)
+        # full_df.to_csv("data/combined_data_pipeline.csv", index=True)
+        # print("✅ Saved all data to combined_data_pipeline.csv")
         # Step 3: Prepare for training
-        print("⚙️ Preparing training data...")
+        # print("⚙️ Preparing training data...")
         # print(full_df.describe())
         # print(full_df.columns)
         # print(full_df.index.dtype)
@@ -92,60 +95,41 @@ def main():
         input_shape = (window_size, X_train.shape[2])
         print(input_shape, len(input_shape))
         model = build_direction_model(input_shape)
+        print(f"X_train shape: {X_train.shape}")
+        print(f"y_train shape: {y_train.shape}")
+        print(f"X_val shape: {X_val.shape}")
+        print(f"y_val shape: {y_val.shape}")
+
+        print(f"First sequence X_train[0]:\n{X_train[0]}")
+        print(f"First target y_train[0]: {y_train[0]}")
         model.summary()
 
-        # Step 5: Train
-        # Before training
-        if len(X_train) == 0 or len(y_train) == 0:
-            print("❌ Empty training data - debugging info:")
-            print("- Original data shape:", full_df.shape)
-            print("- Features after engineering:", generate_features(full_df, trading_type).shape)
-            print("- Unique symbols:", full_df['symbol'].unique())
-            print("- Date range:", full_df.index.min(), "to", full_df.index.max())
-            raise ValueError("Empty training data - see debug output above")
-        print("🚂 Training model...")
-        from sklearn.utils import class_weight
-        y_train_adj = y_train + 1  # -1 → 0, 0 → 1, 1 → 2
-        y_val_adj = y_val + 1
-        classes = np.unique(y_train_adj)
-        cw = class_weight.compute_class_weight('balanced', classes=classes, y=y_train_adj)
-        class_weights = dict(zip(classes, cw))
-        # Shift labels so that -1 → 0, 0 → 1, 1 → 2
-        print("Unique labels:", np.unique(y_train_adj))
-        print("Label dtype:", y_train_adj.dtype)
-        print("Any NaNs in y?", np.isnan(y_train_adj).any())
-        print("Any NaNs in X?", np.isnan(X_train).any())
-
-        y_train_adj = y_train_adj.astype('int64')
-        y_val_adj = y_val_adj.astype('int64')
         trained_model, history = train_model(
             model,
-            X_train, y_train_adj,
-            X_val, y_val_adj,
+            X_train, y_train,
+            X_val, y_val,
             trading_type,
-            class_weights,
             asset_name=str(assets[0]['symbol']),
             epochs=epochs,
             batch_size=batch_size
         )
         print("🎉 Training complete!")
-        # Assume you have:
-        # model, history = train_model(...)
-        # X_val, y_val = validation data numpy arrays
-        # feature_names = list of feature columns used in prepare_dataset
 
-        # explain_features_with_shap(model, X_val)
-        y_pred = trained_model.predict(X_val)
-        # y_pred_labels = np.argmax(y_pred, axis=1)
-        y_pred_labels = np.argmax(y_pred, axis=1) - 1
-        print(confusion_matrix(y_val, y_pred_labels))
-        print("Accuracy:", accuracy_score(y_val, y_pred_labels))
-        print(classification_report(y_val, y_pred_labels))
-        print(f"to check imbalance{np.bincount(y_train)}")
-        print(f"to check imbalance{np.bincount(y_val)}")
+        y_pred = trained_model.predict(X_val).flatten()
+        import numpy as np
+        from sklearn.metrics import r2_score, mean_squared_error
+
+        # Calculate R² score
+        r2 = r2_score(y_val, y_pred)
+
+        # Calculate RMSE
+        rmse = np.sqrt(mean_squared_error(y_val, y_pred))
+
+        print(f"R² Score: {r2:.4f}")
+        print(f"RMSE: {rmse:.4f}")
         # TODO: Stopping the model here until I can see an improvement
-        return "Done"
 
+        return "Done"
         asset_name = assets[0]['news_query']
         asset_symbol = assets[0]['symbol']
         print(f"Fetching news for {asset_name}")
