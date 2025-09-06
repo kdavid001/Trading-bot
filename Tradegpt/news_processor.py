@@ -1,13 +1,13 @@
 import numpy as np
-# from transformers import pipeline
+from transformers import pipeline
 
 
 class NewsProcessor:
-    # def __init__(self):
-        # self.sentiment_pipeline = pipeline(
-        #     "sentiment-analysis",
-        #     model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
-        # )
+    def __init__(self):
+        self.sentiment_pipeline = pipeline(
+            "sentiment-analysis",
+            model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
+        )
 
     def analyze_sentiment(self, text):
         """Get sentiment score from financial news"""

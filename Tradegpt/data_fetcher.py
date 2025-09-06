@@ -65,4 +65,5 @@ def fetch_data():
 
     data = data[['Open', 'High', 'Low', 'Close', 'RSI', 'EMA10', 'EMA200', 'MACD', 'MACD_signal']]
     print("Fetched successfully")
+    data.to_csv('data.csv')
     return data, symbol, trading_type

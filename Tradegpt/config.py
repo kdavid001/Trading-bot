@@ -11,5 +11,6 @@ CONFIG = {
     'alpaca_key': os.getenv('ALPACA_KEY_ID'),
     'alpaca_secret': os.getenv('ALPACA_SECRET_KEY'),
     'open_ai': os.getenv('OPENAI_KEY'),
-    'gemini_api': os.getenv('GEMINI_API_KEY')
+    'gemini_api': os.getenv('GEMINI_API_KEY'),
+    'deepseek_api': os.getenv('DEEPSEEK_API_KEY'),
 }

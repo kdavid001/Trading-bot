@@ -1,13 +1,15 @@
 import numpy as np
-# from transformers import pipeline
+from transformers import pipeline
 
+
+# TODO: Upgrade the transformer - "pip install --upgrade transformers"
 
 class NewsProcessor:
-    # def __init__(self):
-        # self.sentiment_pipeline = pipeline(
-        #     "sentiment-analysis",
-        #     model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
-        # )
+    def __init__(self):
+        self.sentiment_pipeline = pipeline(
+            "sentiment-analysis",
+            model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
+        )
 
     def analyze_sentiment(self, text):
         """Get sentiment score from financial news"""
@@ -108,9 +110,15 @@ class NewsProcessor:
 
 
 if __name__ == "__main__":
+    from transformers import pipeline
+
+    sentiment_pipeline = pipeline("sentiment-analysis")
+    print(sentiment_pipeline("I love Python!"))
     News = NewsProcessor()
     sample_articles = [{'date': 'Mon\nJul 14', 'symbol': 'JPY',
-'forecast': '-1.4%', 'previous': '-9.1%', 'impact': 'low'}, {'date': 'Mon\nJul 14', 'symbol': 'JPY', 'forecast':
-'0.5%', 'previous': '0.5%', 'impact': 'low'}, {'date': 'Mon\nJul 14', 'symbol': 'JPY', 'forecast': '0.1%',
-'previous': '0.3%', 'impact': 'low'}]
+                        'forecast': '-1.4%', 'previous': '-9.1%', 'impact': 'low'},
+                       {'date': 'Mon\nJul 14', 'symbol': 'JPY', 'forecast':
+                           '0.5%', 'previous': '0.5%', 'impact': 'low'},
+                       {'date': 'Mon\nJul 14', 'symbol': 'JPY', 'forecast': '0.1%',
+                        'previous': '0.3%', 'impact': 'low'}]
     print(News.compute_signal(sample_articles, trading_type="forex"))
