@@ -1,6 +1,6 @@
 # Trading Bot
 
-A collection of experiments in ML/LLM-driven trading strategies for forex and crypto. This repo is a workbench, not a single shipped product, it holds several parallel attempts at the same problem (predict price direction / generate trade signals) built at different times with different approaches. Nothing here is production-ready or currently functional end-to-end.
+A collection of experiments in deep learning and LLM-driven trading strategies for forex and crypto. This repo is a workbench, not a single shipped product, it holds several parallel attempts at the same problem (predict price direction / generate trade signals) built at different times with different approaches. Nothing here is production-ready or currently functional end-to-end.
 
 ## Status
 
