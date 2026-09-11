@@ -1,18 +1,35 @@
 # macOS system files
 .DS_Store
+Icon?
 
 # Python cache and compiled files
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
 
 # Environment and credentials
 .env
 *.json
 
-# Local CSV data files
-Complex model - not functional/models
-Complex model - not functional/logs
-Complex model - not functional/data
-Complex model - not functional/test_fetcher.py
+# Trained model checkpoints (generated artifacts, not source)
+*.h5
+*.keras
+*.pt
+*.pth
+models/
+logs/
 
-Simplified Trading bot/models/
+# Generated data files (fetched/derived, not source)
+data/*.csv
+**/data/*.csv
+data.csv
+**/data.csv
+
+# Jupyter
+.ipynb_checkpoints/

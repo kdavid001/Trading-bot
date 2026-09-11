@@ -1,4 +1,0 @@
-Date,Timestamp,Model_type,Layers,Accuracy Score,Comments,Asset_name
-08-08-2025,15:25,CONV1D + LSTM,Conv(64)->lstm(64)->lstm(32)  ,0.4566,"Batch_size - 128, Window_size - 120, Epochs- 70",EURUSD
--,-,LSTM + LSTM,lstm(64)->lstm(64),,,
-,,,,,,

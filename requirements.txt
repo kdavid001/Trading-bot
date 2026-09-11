@@ -4,10 +4,13 @@ numpy
 matplotlib
 seaborn
 scikit-learn
+python-dotenv
+requests
 
 # Financial data
 alpha_vantage
 twelvedata
+yfinance
 ta
 pandas_ta
 
@@ -15,11 +18,17 @@ pandas_ta
 tensorflow
 transformers
 keras-tuner
+shap
 
 # News processing
 newsapi-python
 nltk
 textblob
+selenium
+
+# LLM providers (Tradegpt)
+openai
+google-genai
 
 # Trading execution
 alpaca-trade-api
