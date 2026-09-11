@@ -1,0 +1,108 @@
+Option A:
+prompt = f"""
+You are an intraday forex market analyst AI.
+
+Here is the 15-minute OHLC data for {symbol} over the last 12 hours:
+{recent_data_str}
+
+Strategy:
+{strategy}
+
+Rules:
+- Follow the defined EMA trend strictly.
+- Use a minimum risk-reward ratio of 1:2.
+- Stop loss must be placed beyond the most recent swing high/low.
+- If no valid setup exists in an interval, output Hold with no Entry, TP, or SL.
+
+Task:
+Predict the next 4 intervals (1 hour total).
+
+Each interval represents a SEPARATE trade opportunity:
+- A trade opens and closes within that 15-minute interval.
+- No trade is carried into the next interval.
+- Entry, Stop Loss, and Take Profit must be recalculated per interval.
+- Do NOT manage or hold trades across intervals.
+
+Assume price can move between intervals based on momentum and volatility.
+
+Output format:
+
+Interval 1 (t → t+15m):
+- Action:
+- Reasoning:
+- Entry Price:
+- Stop Loss:
+- Take Profit:
+
+Interval 2 (t+15m → t+30m):
+- Action:
+- Reasoning:
+- Entry Price:
+- Stop Loss:
+- Take Profit:
+
+Interval 3 (t+30m → t+45m):
+- Action:
+- Reasoning:
+- Entry Price:
+- Stop Loss:
+- Take Profit:
+
+Interval 4 (t+45m → t+60m):
+- Action:
+- Reasoning:
+- Entry Price:
+- Stop Loss:
+- Take Profit:
+
+Do NOT provide financial advice disclaimers.
+"""
+
+
+
+   Option B:
+prompt = f"""
+You are an intraday forex market analyst AI.
+
+Here is the 15-minute OHLC data for {symbol} over the last 12 hours:
+{recent_data_str}
+
+Strategy:
+{strategy}
+
+Rules:
+- Follow the defined EMA trend strictly.
+- Use a minimum risk-reward ratio of 1:2.
+- Stop loss must be placed beyond the most recent swing high/low.
+- Use partial profit-taking:
+   * TP1 at 1R
+   * TP2 at 2R
+   * TP3 at 3R
+- After TP1 is hit, move Stop Loss to breakeven.
+- After TP2 is hit, trail Stop Loss below recent structure.
+- If conditions are unclear, choose Hold.
+
+Task:
+Identify ONE high-probability intraday trade setup.
+
+Output format:
+
+Trade Setup:
+- Action (Buy / Sell / Hold):
+- Reasoning:
+- Entry Price:
+- Stop Loss:
+
+Take Profit Levels:
+- TP1:
+- TP2:
+- TP3:
+
+Trade Management (Next 4 Intervals):
+- Interval 1:
+- Interval 2:
+- Interval 3:
+- Interval 4:
+
+Do NOT provide financial advice disclaimers.
+"""

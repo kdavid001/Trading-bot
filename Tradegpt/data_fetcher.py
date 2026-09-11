@@ -33,7 +33,7 @@ def calculate_tp_sl(entry_price, direction, rr_ratio=2, sl_pct=0.2):
     return tp, sl
 
 
-def fetch_data():
+def fetch_data(symbol):
     trading_type = "forex"
     ###########################################################
     # symbol = input('Enter a symbol (e.g., EUR/USD or AAPL): ')
@@ -41,7 +41,6 @@ def fetch_data():
     #     symbol = format_forex_symbol(symbol)
     ###########################################################
 
-    symbol = "EUR/USD"
     if trading_type == "forex":
         symbol = format_forex_symbol(symbol)
     print(f'Fetching data for symbol: {symbol}')
@@ -66,4 +65,4 @@ def fetch_data():
     data = data[['Open', 'High', 'Low', 'Close', 'RSI', 'EMA10', 'EMA200', 'MACD', 'MACD_signal']]
     print("Fetched successfully")
     data.to_csv('data.csv')
-    return data, symbol, trading_type
+    return data, trading_type

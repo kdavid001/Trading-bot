@@ -4,6 +4,7 @@ from openai._exceptions import RateLimitError
 from config import CONFIG
 from data_fetcher import fetch_data
 from google import genai
+from google.genai import types
 from news_processor import NewsProcessor
 from news_scraper import News_scraper
 
@@ -16,7 +17,8 @@ deepseek_client = OpenAI(api_key=CONFIG.get('deepseek_api'), base_url="https://a
 #TODO: Create a private Virtual enviroment for each project specifically this.
 
 # Fetch last 48 intervals (~12 hours)
-data, symbol, trading_type = fetch_data()
+symbol = "GBP/JPY"
+data, trading_type = fetch_data(symbol)
 
 
 def news_processor():
@@ -32,7 +34,7 @@ resistance1 = 2 * pivot - low"""
 
 
 def process_gbt():
-    if data is None or any([openai_client,gemini_client,deepseek_client]) is None:
+    if data is None or any([openai_client, gemini_client, deepseek_client]) is None:
         print("No data or OpenAI client available.")
         return
 
@@ -41,9 +43,9 @@ def process_gbt():
 
     strategy = f"""
                     Hybrid RSI + EMA + Sentiment Strategy:
-                - Use EMA200 as a trend filter:
-                   * If price > EMA10 → uptrend, only take Buy signals.
-                   * If price < EMA10 → downtrend, only take Sell signals.
+               - Use EMA200 as a trend filter:
+                    * If price > EMA200 → uptrend
+                    * If price < EMA200 → downtrend
                 - RSI rules:
                    * RSI < 30 → Buy (only if trend = up).
                    * RSI > 70 → Sell (only if trend = down).
@@ -56,15 +58,50 @@ def process_gbt():
                 """
 
     prompt = f"""
-                You are an intraday stock market analyst AI.
-                Here is the 15-min data for {symbol} for the last 12 hours:
-                {recent_data_str}
-                
-                Strategy:
-                {strategy}
-                Based on this, predict the next 4 intervals (1 hour) 
-                with recommended actions (Buy/Sell/Hold) and reasoning for each interval.
-              """
+    You are an intraday forex market analyst AI.
+
+    Here is the 15-minute OHLC data for {symbol} over the last 12 hours:
+    {recent_data_str}
+
+    Strategy:
+    {strategy}
+
+    Rules:
+    - Follow the defined EMA trend strictly.
+    - Use a minimum risk-reward ratio of 1:2.
+    - Stop loss must be placed beyond the most recent swing high/low.
+    - Use partial profit-taking:
+       * TP1 at 1R
+       * TP2 at 2R
+       * TP3 at 3R
+    - After TP1 is hit, move Stop Loss to breakeven.
+    - After TP2 is hit, trail Stop Loss below recent structure.
+    - If conditions are unclear, choose Hold.
+
+    Task:
+    Identify ONE high-probability intraday trade setup.
+
+    Output format:
+
+    Trade Setup:
+    - Action (Buy / Sell / Hold):
+    - Reasoning:
+    - Entry Price:
+    - Stop Loss:
+
+    Take Profit Levels:
+    - TP1:
+    - TP2:
+    - TP3:
+
+    Trade Management (Next 4 Intervals):
+    - Interval 1:
+    - Interval 2:
+    - Interval 3:
+    - Interval 4:
+
+    Do NOT provide financial advice disclaimers.
+    """
 
     try:
         response = openai_client.chat.completions.create(
