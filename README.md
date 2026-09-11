@@ -70,8 +70,25 @@ cd Tradegpt
 python GPT.py
 ```
 
+## Technical indicators used
+
+| Indicator | What it measures |
+|---|---|
+| RSI | Momentum — overbought (>70) / oversold (<30) |
+| MACD | Trend direction via short vs long EMA crossover |
+| ATR | Volatility — average range between high and low |
+| Bollinger Bands | Price extremes — upper/lower are ±2 std devs from a moving average |
+| OBV | Volume-weighted trend confirmation |
+| CMF | Buying vs selling pressure over a period |
+| KST | Smoothed rate-of-change momentum oscillator |
+| Squeeze | Bollinger Band / Keltner Channel convergence — flags potential breakouts |
+
 ## Known issues / cleanup TODO
 
 - `Complex model - not functional`, `Simplified Trading bot`, and `Trading_bot_copy` duplicate most of their pipeline code (`data_fetcher.py`, `feature_Engine.py`, `news_processor.py`, `news_scraper.py`) — these should eventually be merged into one shared package instead of copy-pasted per experiment.
 - The `news_scraper.py` in each folder uses Selenium with ChromeDriver. Selenium 4.6+ includes Selenium Manager which downloads the driver automatically, but Chrome must be installed on the machine.
 - See `ideas.md` for the running list of modeling TODOs (e.g. removing sentiment from training features, keeping only the best checkpoint by validation loss).
+
+## Disclaimer
+
+Educational project — not financial advice. Trading involves real risk. Always paper trade before using any of this with live money.
