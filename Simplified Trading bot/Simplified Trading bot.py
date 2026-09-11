@@ -129,7 +129,7 @@ def main():
             batch_size=batch_size
         )
         print("🎉 Training complete!")
-        # Assume you have:
+
         # model, history = train_model(...)
         # X_val, y_val = validation data numpy arrays
         # feature_names = list of feature columns used in prepare_dataset
@@ -219,10 +219,9 @@ if __name__ == "__main__":
             # Limit GPU memory growth
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
-            # Optional: Set specific GPU
             # tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
         except RuntimeError as e:
-            print(f"⚠️ GPU configuration error: {e}")
+            print(f"GPU configuration error: {e}")
 
     # Run pipeline
     main()
